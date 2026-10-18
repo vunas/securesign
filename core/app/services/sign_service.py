@@ -117,7 +117,10 @@ class SignService:
 
     def _load_private_key(self, key_record, sign_data: SignatureCreate):
         # 1. Luôn giải mã AES Master Key trước
-        priv_key_bytes = aes_service.decrypt_key(key_record.private_key_encrypted)
+        try:
+            priv_key_bytes = aes_service.decrypt_key(key_record.private_key_encrypted)
+        except Exception as exc:
+            raise ValueError("Mật khẩu giải mã khóa không đúng hoặc sai định dạng PEM.") from exc
 
         # 2. Giải mã bằng Passphrase nếu có đặt mật khẩu phụ
         try:

@@ -147,8 +147,7 @@ def mock_sign_repos(monkeypatch):
             self.credential = SimpleNamespace(
                 id=1,
                 file_name="test.pdf",
-                original_file_path="local:/tmp/test.pdf",
-                signed_file_path=None,
+                file_download_url=None,
             )
             self.key = SimpleNamespace(
                 id=1, storage_type="server", private_key_encrypted=b"ENCRYPTED"

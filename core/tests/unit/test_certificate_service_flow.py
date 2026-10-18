@@ -122,10 +122,10 @@ class TestCertificateServiceFlow:
         monkeypatch.setattr("app.services.certificate_service.log_service.log_action", AsyncMock())
 
         # Act
-        out = await cert_service.create_root_ca(db=object(), user_id=3, cert_data=cert_data)
+        out = await cert_service.create_root_ca(db=object(), tenant_id=3, cert_data=cert_data)
 
         # Assert
         assert out.id == 9
-        assert created["user_id"] == 3
+        assert created["tenant_id"] == 3
         assert created["key_id"] == 1
         assert created["cert_name"] == "Root CA"

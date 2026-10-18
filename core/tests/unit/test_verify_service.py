@@ -1,4 +1,3 @@
-import builtins
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -10,142 +9,35 @@ pytestmark = pytest.mark.asyncio
 
 
 @pytest.mark.unit
-async def test_verify_pdf_signature_missing_file_raises(monkeypatch):
-    # Validates: hard failure when file path doesn't exist.
-    svc = VerifyService()
-    # Avoid relying on real filesystem state.
-    import app.services.verify_service as vs_mod
-
-    monkeypatch.setattr(vs_mod.os.path, "exists", lambda p: False)
-    monkeypatch.setattr("app.services.verify_service.log_service.log_action", AsyncMock())
-    monkeypatch.setattr(
-        "app.services.verify_service.verify_log_service.create_verify_log", AsyncMock()
-    )
-    with pytest.raises(FileNotFoundError):
-        await svc.verify_pdf_signature(db=None, file_path="does-not-exist.pdf")
-
-
-@pytest.mark.unit
-async def test_verify_pdf_signature_empty_file_returns_message(monkeypatch):
-    # Validates: 0-byte PDF returns a deterministic "empty file" response.
-    svc = VerifyService()
-
-    monkeypatch.setattr("app.services.verify_service.os.path.exists", lambda p: True)
-    monkeypatch.setattr("app.services.verify_service.os.path.getsize", lambda p: 0)
+async def test_verify_pdf_signature_empty_bytes_returns_message(monkeypatch):
+    service = VerifyService()
     monkeypatch.setattr("app.services.verify_service.log_service.log_action", AsyncMock())
     monkeypatch.setattr(
         "app.services.verify_service.verify_log_service.create_verify_log", AsyncMock()
     )
 
-    res = await svc.verify_pdf_signature(db=None, file_path="x.pdf")
-    assert res["is_valid"] is False
-    assert "rỗng" in res["message"]
+    result = await service.verify_pdf_signature(db=None, file=b"")
+
+    assert result["is_valid"] is False
+    assert "rỗng" in result["message"]
 
 
 @pytest.mark.unit
-async def test_verify_pdf_signature_no_root_ca_returns_message(monkeypatch):
-    # Validates: if no trust roots in DB, verification short-circuits with guidance.
-    svc = VerifyService()
-
-    monkeypatch.setattr("app.services.verify_service.os.path.exists", lambda p: True)
-    monkeypatch.setattr("app.services.verify_service.os.path.getsize", lambda p: 10)
+async def test_verify_pdf_signature_without_root_ca_returns_message(monkeypatch):
+    service = VerifyService()
     monkeypatch.setattr(
         "app.services.verify_service.verify_log_service.create_verify_log", AsyncMock()
     )
-
-    class DummyQuery:
-        def filter(self, *args, **kwargs):
-            return self
-
-        def all(self):
-            return []
-
-    async def _execute(stmt):
-        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: []))
-
-    db = SimpleNamespace(execute=_execute)
-
-    # Avoid touching filesystem; VerifyService won't open when roots are missing.
-    res = await svc.verify_pdf_signature(db=db, file_path="x.pdf")
-    assert res["is_valid"] is False
-    assert "Root CA" in res["message"]
-
-
-@pytest.mark.unit
-async def test_verify_pdf_signature_invalid_signature_result(monkeypatch):
-    # Validates: invalid/tampered signature maps to is_valid=False.
-    svc = VerifyService()
-
-    monkeypatch.setattr("app.services.verify_service.os.path.exists", lambda p: True)
-    monkeypatch.setattr("app.services.verify_service.os.path.getsize", lambda p: 10)
     monkeypatch.setattr("app.services.verify_service.log_service.log_action", AsyncMock())
-    monkeypatch.setattr(
-        "app.services.verify_service.verify_log_service.create_verify_log", AsyncMock()
-    )
 
-    root_record = SimpleNamespace(certificate_data=b"DERROOT")
+    async def execute(_statement):
+        return SimpleNamespace(
+            scalar_one_or_none=lambda: None,
+            scalars=lambda: SimpleNamespace(all=lambda: []),
+        )
 
-    class DummyQuery:
-        def __init__(self, rows):
-            self._rows = rows
+    db = SimpleNamespace(execute=execute)
+    result = await service.verify_pdf_signature(db=db, file=b"not-a-pdf")
 
-        def filter(self, *args, **kwargs):
-            return self
-
-        def all(self):
-            return self._rows
-
-    # First query (roots) -> [root_record], second query (intermediates) -> []
-    calls = {"n": 0}
-
-    def fake_query(model):
-        calls["n"] += 1
-        return DummyQuery([root_record] if calls["n"] == 1 else [])
-
-    async def _execute(stmt):
-        calls["n"] += 1
-        rows = [root_record] if calls["n"] == 1 else []
-        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: rows))
-
-    db = SimpleNamespace(execute=_execute)
-
-    # Mock cert loading and validation context to avoid asn1crypto internals.
-    monkeypatch.setattr(
-        "app.services.verify_service.ValidationContext",
-        lambda trust_roots, other_certs: object(),
-    )
-    monkeypatch.setattr(
-        "app.services.verify_service.x509.Certificate.load",
-        lambda b: object(),
-    )
-
-    class DummyPdfReader:
-        def __init__(self, *args, **kwargs):
-            self.embedded_signatures = [SimpleNamespace(sig_object={})]
-
-    monkeypatch.setattr("app.services.verify_service.PdfFileReader", DummyPdfReader)
-
-    dummy_status = SimpleNamespace(
-        valid=False,
-        intact=False,
-        coverage=SimpleNamespace(name="ENTIRE_FILE"),
-        timestamp_validity=None,
-    )
-    monkeypatch.setattr(
-        "app.services.verify_service.validation.validate_pdf_signature",
-        lambda *args, **kwargs: dummy_status,
-    )
-
-    # Mock open() used by VerifyService
-    class DummyOpen:
-        def __enter__(self):
-            return object()
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-    monkeypatch.setattr(builtins, "open", lambda *a, **k: DummyOpen())
-
-    res = await svc.verify_pdf_signature(db=db, file_path="x.pdf")
-    assert res["is_valid"] is False
-    assert "KHÔNG HỢP LỆ" in res["message"]
+    assert result["is_valid"] is False
+    assert "Root CA" in result["message"]

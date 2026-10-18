@@ -32,12 +32,6 @@ async def test_upload_credential_hash_is_computed(monkeypatch):
     """
     created_db_record = {}
 
-    async def fake_save_file(content: bytes, filename: str, content_type: str) -> str:
-        assert content == b"ABC"
-        assert content_type == "application/pdf"
-        return f"local:/tmp/{filename}"
-
-    monkeypatch.setattr("app.services.file_service.save_file", fake_save_file)
     monkeypatch.setattr(
         "app.services.file_service.credential_repo.create",
         AsyncMock(
@@ -54,8 +48,9 @@ async def test_upload_credential_hash_is_computed(monkeypatch):
 
     assert credential.tenant_id == 1
     assert created_db_record["original_hash"] == hashlib.sha256(b"ABC").hexdigest()
-    assert created_db_record["signed_hash"] == hashlib.sha256(b"ABC").hexdigest()
+    assert created_db_record["signed_hash"] is None
     assert created_db_record["file_name"] == "doc.pdf"
+    assert created_db_record["file_download_url"] is None
 
 
 @pytest.mark.unit
@@ -66,10 +61,6 @@ async def test_upload_credential_empty_file_edge_case(monkeypatch):
     """
     created_db_record = {}
 
-    async def fake_save_file(content: bytes, filename: str, content_type: str) -> str:
-        return f"local:/tmp/{filename}"
-
-    monkeypatch.setattr("app.services.file_service.save_file", fake_save_file)
     monkeypatch.setattr(
         "app.services.file_service.credential_repo.create",
         AsyncMock(
@@ -82,6 +73,5 @@ async def test_upload_credential_empty_file_edge_case(monkeypatch):
 
     svc = FileService()
     f = DummyUploadFile("empty.pdf", "application/pdf", b"")
-    await svc.upload_credential(db=object(), user_id=1, file=f, tenant_id=1)
-
-    assert created_db_record["original_hash"] == hashlib.sha256(b"").hexdigest()
+    with pytest.raises(ValueError, match="không được rỗng"):
+        await svc.upload_credential(db=object(), user_id=1, file=f, tenant_id=1)

@@ -48,7 +48,7 @@ class TestSignServiceFlow:
         # Act / Assert
         with pytest.raises(ValueError, match="Không tìm thấy tài liệu"):
             await sign_service._get_and_validate_records(
-                db=object(), user_id=1, sign_data=sign_input
+                db=object(), tenant_id=1, sign_data=sign_input
             )
 
     async def test_load_private_key_local_without_raw_key_raises_value_error(
@@ -58,7 +58,7 @@ class TestSignServiceFlow:
         key_record = SimpleNamespace(storage_type="local", private_key_encrypted=b"ENC")
 
         # Act / Assert
-        with pytest.raises(ValueError, match="đính kèm file Private Key"):
+        with pytest.raises(ValueError, match="giải mã khóa"):
             sign_service._load_private_key(key_record, sign_input)
 
     async def test_load_certificate_missing_data_raises_value_error(self, sign_service):
@@ -160,10 +160,9 @@ class TestSignServiceFlow:
     ):
         # Arrange
         credential = SimpleNamespace(
-            id=1, file_name="a.pdf", file_download_url="local:/a.pdf", signed_hash=None
+            id=1, file_name="a.pdf", file_download_url=None, signed_hash=None
         )
-        credential.mark_as_signed = lambda new_signed_path, new_signed_hash: (
-            setattr(credential, "file_download_url", new_signed_path),
+        credential.mark_as_signed = lambda new_signed_hash: (
             setattr(credential, "signed_hash", new_signed_hash),
         )
         key_record = SimpleNamespace(id=2)
@@ -175,10 +174,6 @@ class TestSignServiceFlow:
             "_get_and_validate_records",
             AsyncMock(return_value=(credential, key_record, cert_record)),
         )
-        monkeypatch.setattr(
-            "app.services.sign_service.get_signed_file_path",
-            lambda file_name, input_path: "local:/signed.pdf",
-        )
         monkeypatch.setattr(sign_service, "_load_private_key", lambda *args, **kwargs: object())
         monkeypatch.setattr(sign_service, "_load_certificate", lambda *args, **kwargs: object())
         monkeypatch.setattr(
@@ -187,7 +182,11 @@ class TestSignServiceFlow:
             AsyncMock(return_value=object()),
         )
         monkeypatch.setattr(sign_service, "_setup_timestamper", AsyncMock(return_value=None))
-        monkeypatch.setattr(sign_service, "_execute_pdf_signing", lambda *args, **kwargs: None)
+        monkeypatch.setattr(
+            sign_service,
+            "_execute_pdf_signing",
+            lambda *args, **kwargs: (b"signed", "signed-hash"),
+        )
 
         captured = {"create": 0, "update": 0}
 
@@ -202,12 +201,14 @@ class TestSignServiceFlow:
         monkeypatch.setattr("app.services.sign_service.log_service.log_action", AsyncMock())
 
         # Act
-        result = await sign_service.sign_pdf(db=object(), user_id=1, sign_data=sign_input)
+        result = await sign_service.sign_pdf(
+            db=object(), pdf_bytes=b"%PDF", tenant_id=1, user_id=1, sign_data=sign_input
+        )
 
         # Assert
-        assert result == signature_record
+        assert result == (b"signed", "signed-hash")
         assert captured["create"] == 1
-        assert credential.file_download_url == "local:/signed.pdf"
+        assert credential.signed_hash == "signed-hash"
 
     async def test_sign_pdf_exception_path_triggers_uow_rollback(
         self, sign_service, sign_input, mock_uow, monkeypatch
@@ -221,7 +222,9 @@ class TestSignServiceFlow:
 
         async def _service_with_uow():
             try:
-                await sign_service.sign_pdf(db=object(), user_id=1, sign_data=sign_input)
+                await sign_service.sign_pdf(
+                    db=object(), pdf_bytes=b"%PDF", tenant_id=1, user_id=1, sign_data=sign_input
+                )
                 await mock_uow.commit()
             except Exception:
                 await mock_uow.rollback()

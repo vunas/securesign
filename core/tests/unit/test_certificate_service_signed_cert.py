@@ -100,7 +100,7 @@ class TestCertificateServiceSignedCert:
         # Act
         out = await service.create_signed_cert(
             db=object(),
-            user_id=2,
+            tenant_id=2,
             cert_data=cert_data,
             issuer_cert=issuer_cert,
         )

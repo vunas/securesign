@@ -17,7 +17,7 @@ class TestAuthService:
     async def test_register_user_new_username_creates_user(self, auth_service, monkeypatch):
         # Arrange
         user_in = SimpleNamespace(username="alice")
-        created_user = SimpleNamespace(id=1, username="alice")
+        created_user = SimpleNamespace(id=1, username="alice", tenant_id=None)
         monkeypatch.setattr(
             "app.services.auth_service.user_repo.get_by_username",
             AsyncMock(return_value=None),
@@ -52,7 +52,9 @@ class TestAuthService:
         self, auth_service, monkeypatch
     ):
         # Arrange
-        user = SimpleNamespace(id=1, username="alice", password_hash="hashed", is_active=True)
+        user = SimpleNamespace(
+            id=1, username="alice", password_hash="hashed", is_active=True, tenant_id=None
+        )
         monkeypatch.setattr(
             "app.services.auth_service.user_repo.get_by_username",
             AsyncMock(return_value=user),

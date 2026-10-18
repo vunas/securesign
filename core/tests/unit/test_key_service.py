@@ -43,7 +43,7 @@ async def test_key_service_create_key_fingerprint_sha256_first_16_upper_hex(monk
         passphrase=None,
     )
 
-    result = await service.create_key(db=object(), user_id=7, key_data=key_data)
+    result = await service.create_key(db=object(), tenant_id=7, key_data=key_data)
     assert result is not None
 
     pub_pem = captured["public_key"]

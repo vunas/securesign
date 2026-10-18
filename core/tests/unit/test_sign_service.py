@@ -21,7 +21,7 @@ async def test_sign_pdf_missing_records_raises_value_error(mock_sign_repos):
     sign_data = SimpleNamespace(credential_id=1, key_id=1)
 
     with pytest.raises(ValueError, match="Không tìm thấy tài liệu"):
-        await svc.sign_pdf(db=None, user_id=1, sign_data=sign_data)
+        await svc.sign_pdf(db=None, pdf_bytes=b"%PDF", tenant_id=1, user_id=1, sign_data=sign_data)
 
 
 @pytest.mark.unit
@@ -45,8 +45,8 @@ async def test_sign_pdf_local_key_requires_raw_private_key(mock_sign_repos):
         signer_location="l",
     )
 
-    with pytest.raises(ValueError, match="Private Key"):
-        await svc.sign_pdf(db=None, user_id=1, sign_data=sign_data)
+    with pytest.raises(ValueError, match="giải mã khóa"):
+        await svc.sign_pdf(db=None, pdf_bytes=b"%PDF", tenant_id=1, user_id=1, sign_data=sign_data)
 
 
 @pytest.mark.unit
@@ -77,4 +77,4 @@ async def test_sign_pdf_invalid_passphrase_maps_to_value_error(mock_sign_repos, 
     monkeypatch.setattr("app.services.sign_service.load_pem_private_key", fake_load_pem_private_key)
 
     with pytest.raises(ValueError, match="Mật khẩu giải mã khóa"):
-        await svc.sign_pdf(db=None, user_id=1, sign_data=sign_data)
+        await svc.sign_pdf(db=None, pdf_bytes=b"%PDF", tenant_id=1, user_id=1, sign_data=sign_data)

@@ -38,8 +38,8 @@ class TestCredentialRepository:
             tenant_id=1,
             created_by_user_id=1,
             tracking_id="track-1",
-            student_name="Alice",
-            student_id="STU-1",
+            recipient_name="Alice",
+            recipient_id="STU-1",
             issue_date="2026-01-01",
             file_name="a.pdf",
             original_hash="h",
@@ -72,7 +72,7 @@ class TestCredentialRepository:
         self, credential_repo_instance
     ):
         # Arrange
-        db_obj = SimpleNamespace(status=None, signed_file_path=None, signed_file_hash=None)
+        db_obj = SimpleNamespace(status=None, signed_hash=None)
         calls = {"flush": 0}
 
         class DummyDB:
@@ -86,13 +86,11 @@ class TestCredentialRepository:
             db=db,
             db_obj=db_obj,
             status="SIGNED",
-            signed_path="local:/signed.pdf",
             signed_hash="abc",
         )
 
         # Assert
         assert out is db_obj
         assert db_obj.status == "SIGNED"
-        assert db_obj.signed_file_path == "local:/signed.pdf"
-        assert db_obj.signed_file_hash == "abc"
+        assert db_obj.signed_hash == "abc"
         assert calls["flush"] == 1
