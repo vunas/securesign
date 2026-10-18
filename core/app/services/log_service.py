@@ -18,18 +18,14 @@ class LogService:
         action: str,
         target_type: TargetResourceType,
         target_id: str,
+        tenant_id: int | None = None,
         level: LogLevel = LogLevel.INFO,
         status: ActionStatus = ActionStatus.SUCCESS,
         payload: dict = None,
         ip_address: str = None,
         user_agent: str = None,
     ):
-        """
-        Ghi nhận một hành động vào hệ thống Audit Log.
-        Sử dụng Hashing nối tiếp (Chain Hashing) để chống giả mạo DB.
-        """
         try:
-            # 1. Tìm log trước đó để lấy mã băm cũ
             result = await db.execute(select(AuditLog).order_by(desc(AuditLog.id)).limit(1))
             last_log_record = result.scalars().first()
             previous_hash = (
@@ -38,13 +34,12 @@ class LogService:
                 else "GENESIS_HASH"
             )
 
-            # 2. Chuẩn bị dữ liệu và tạo mã băm cho dòng log hiện tại
             safe_payload = json.dumps(jsonable_encoder(payload or {}), sort_keys=True)
-            data_to_hash = f"{previous_hash}|{user_id}|{action}|{target_type}|{target_id}|{status}|{safe_payload}"
+            data_to_hash = f"{previous_hash}|{tenant_id}|{user_id}|{action}|{target_type}|{target_id}|{status}|{safe_payload}"
             current_hash = hashlib.sha256(data_to_hash.encode("utf-8")).hexdigest()
 
-            # 3. Tạo record AuditLog
             new_log = AuditLog(
+                tenant_id=tenant_id,
                 user_id=user_id,
                 action=action,
                 target_type=target_type,
@@ -59,12 +54,10 @@ class LogService:
 
             db.add(new_log)
             await db.flush()
-
             return new_log
 
         except Exception as e:
-            logger.error(f"Lỗi nghiêm trọng khi ghi Audit Log: {str(e)}")
-            # Không raise error để tránh làm hỏng luồng nghiệp vụ chính
+            logger.error(f"Lỗi ghi Audit Log: {str(e)}")
             pass
 
 

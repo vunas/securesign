@@ -49,7 +49,8 @@ class CertificateService:
         cert_data: CertificateCreate | None = None,
         user_id: int | None = None,
     ):
-        tenant_id = tenant_id if tenant_id is not None else user_id
+        if tenant_id is None:
+            raise ValueError("Tenant ID là bắt buộc đối với dịch vụ mật mã PKI.")
         key_record = await key_repo.get_by_id(db, cert_data.key_id, tenant_id)
         private_key = self._get_private_key(key_record)
         public_key = load_pem_public_key(key_record.public_key)
@@ -107,11 +108,15 @@ class CertificateService:
 
         await log_service.log_action(
             db=db,
-            user_id=None,
+            tenant_id=tenant_id,
+            user_id=user_id,
             action="CREATE_ROOT_CA",
             target_type=TargetResourceType.CERTIFICATE,
             target_id=str(created_cert.id),
-            payload={"serial": str(certificate.serial_number), "subject": cert_data.subject},
+            payload={
+                "serial": str(certificate.serial_number),
+                "subject": cert_data.subject,
+            },
         )
         return created_cert
 
@@ -123,13 +128,12 @@ class CertificateService:
         issuer_cert=None,
         user_id: int | None = None,
     ):
-        tenant_id = tenant_id if tenant_id is not None else user_id
+        if tenant_id is None:
+            raise ValueError("Tenant ID là bắt buộc đối với dịch vụ mật mã PKI.")
         user_key_record = await key_repo.get_by_id(db, cert_data.key_id, tenant_id)
         user_public_key = load_pem_public_key(user_key_record.public_key)
 
-        issuer_tenant_id = getattr(issuer_cert, "tenant_id", None)
-        if issuer_tenant_id is None:
-            issuer_tenant_id = getattr(issuer_cert, "user_id", tenant_id)
+        issuer_tenant_id = getattr(issuer_cert, "tenant_id", None) or tenant_id
         issuer_key_record = await key_repo.get_by_id(db, issuer_cert.key_id, issuer_tenant_id)
         issuer_private_key = self._get_private_key(issuer_key_record)
         issuer_x509 = x509.load_der_x509_certificate(issuer_cert.certificate_data)
@@ -215,11 +219,15 @@ class CertificateService:
 
         await log_service.log_action(
             db=db,
-            user_id=None,
+            tenant_id=tenant_id,
+            user_id=user_id,
             action="CREATE_SIGNED_CERT",
             target_type=TargetResourceType.CERTIFICATE,
             target_id=str(created_cert.id),
-            payload={"serial": str(certificate.serial_number), "type": cert_data.cert_type},
+            payload={
+                "serial": str(certificate.serial_number),
+                "type": cert_data.cert_type,
+            },
         )
         return created_cert
 

@@ -9,6 +9,7 @@ from sqlalchemy.sql import func
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.models.credential import Credential
     from app.models.signature import Signature
     from app.models.tenant import Tenant
     from app.models.user import User
@@ -22,6 +23,9 @@ class VerifyLog(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("tenants.id", ondelete="SET NULL"), index=True
+    )
+    credential_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("credentials.id", ondelete="SET NULL"), index=True
     )
     tracking_id: Mapped[Optional[str]] = mapped_column(String(64), index=True)
     signature_id: Mapped[Optional[int]] = mapped_column(
@@ -47,5 +51,6 @@ class VerifyLog(Base):
     )
 
     tenant: Mapped[Optional["Tenant"]] = relationship(back_populates="verify_logs")
+    credential: Mapped[Optional["Credential"]] = relationship()
     signature: Mapped[Optional["Signature"]] = relationship()
     verified_by: Mapped[Optional["User"]] = relationship()

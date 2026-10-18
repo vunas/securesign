@@ -31,17 +31,16 @@ class Credential(Base):
     )
     tracking_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     credential_number: Mapped[Optional[str]] = mapped_column(String(100))
-    student_name: Mapped[str] = mapped_column(String(150), nullable=False)
-    student_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    major: Mapped[Optional[str]] = mapped_column(String(150))
+    recipient_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    recipient_id: Mapped[Optional[str]] = mapped_column(String(50), index=True)
     issue_date: Mapped[date] = mapped_column(Date, nullable=False)
     metadata_: Mapped[Optional[Dict[str, Any]]] = mapped_column(
         "metadata", JSON().with_variant(JSONB(), "postgresql")
     )
     file_name: Mapped[Optional[str]] = mapped_column(String(255))
     original_hash: Mapped[str] = mapped_column(Text, nullable=False)
-    signed_hash: Mapped[str] = mapped_column(Text, nullable=False)
-    file_download_url: Mapped[Optional[str]] = mapped_column(Text)
+    signed_hash: Mapped[Optional[str]] = mapped_column(Text)
+    file_download_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[CredentialStatus] = mapped_column(
         Enum(CredentialStatus, name="credential_status", values_callable=enum_values),
         default=CredentialStatus.ISSUED,
@@ -67,8 +66,7 @@ class Credential(Base):
     )
     signatures: Mapped[List["Signature"]] = relationship(back_populates="credential")
 
-    def mark_as_signed(self, new_signed_path: str, new_signed_hash: str) -> None:
-        self.file_download_url = new_signed_path
+    def mark_as_signed(self, new_signed_hash: str) -> None:
         self.signed_hash = new_signed_hash
         self.status = CredentialStatus.ISSUED
 

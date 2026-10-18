@@ -34,18 +34,10 @@ class CredentialRepository:
         db_obj: Credential,
         status: CredentialStatus,
         signed_hash: str | None = None,
-        signed_path: str | None = None,
     ):
         db_obj.status = status
         if signed_hash:
             db_obj.signed_hash = signed_hash
-        if signed_path:
-            db_obj.file_download_url = signed_path
-            if hasattr(db_obj, "signed_file_path"):
-                db_obj.signed_file_path = signed_path
-        if hasattr(db_obj, "signed_file_hash") and signed_hash:
-            db_obj.signed_file_hash = signed_hash
-
         await db.flush()
         return db_obj
 

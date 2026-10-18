@@ -18,11 +18,9 @@ class KeyService:
         db: AsyncSession,
         tenant_id: int | None = None,
         key_data: KeyCreate | None = None,
-        user_id: int | None = None,
     ):
-        tenant_id = tenant_id if tenant_id is not None else user_id
-        if tenant_id is None or key_data is None:
-            raise ValueError("Tenant và thông tin khóa là bắt buộc.")
+        if tenant_id is None:
+            raise ValueError("Tenant ID là bắt buộc đối với dịch vụ mật mã PKI.")
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=key_data.key_size)
 
         unencrypted_pem = private_key.private_bytes(
@@ -67,6 +65,7 @@ class KeyService:
 
         await log_service.log_action(
             db=db,
+            tenant_id=tenant_id,
             user_id=None,
             action="GENERATE_KEY",
             target_type=TargetResourceType.KEY,

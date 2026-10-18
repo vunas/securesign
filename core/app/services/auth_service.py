@@ -29,6 +29,7 @@ class AuthService:
 
         await log_service.log_action(
             db=db,
+            tenant_id=created_user.tenant_id,
             user_id=created_user.id,
             action="REGISTER_USER",
             target_type=TargetResourceType.USER,
@@ -58,6 +59,7 @@ class AuthService:
 
         await log_service.log_action(
             db=db,
+            tenant_id=user.tenant_id,
             user_id=user.id,
             action="USER_LOGIN",
             target_type=TargetResourceType.USER,
