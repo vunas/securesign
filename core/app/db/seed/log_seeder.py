@@ -24,6 +24,7 @@ async def seed_logs(db: AsyncSession, docs: list, users: dict):
     for credential in verified_credentials:
         db.add(
             VerifyLog(
+                credential_id=credential.id,
                 tracking_id=credential.tracking_id,
                 tenant_id=users["tenant"].id,
                 signature_id=random.choice(signatures).id,
