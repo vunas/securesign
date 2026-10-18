@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user, get_db
+from app.models.enums import CertType
 from app.models.user import User
 from app.schemas.certificate_schema import CertificateCreate, CertificateResponse
 from app.services.certificate_service import certificate_service
@@ -18,6 +19,12 @@ async def create_certificate(
     """
     Tạo một chứng chỉ End-User mới. Do Intermediate CA cấp phát.
     """
+    if cert_data.cert_type != CertType.END_ENTITY:
+        raise HTTPException(
+            status_code=400,
+            detail="Tổ chức chỉ được phép tạo chứng thư số loại END_ENTITY.",
+        )
+
     try:
         issuer_cert = await certificate_service.get_intermediate_ca(db)
         if not issuer_cert:

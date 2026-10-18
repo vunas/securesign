@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import (
 
 from app.core.dependencies import get_current_user, get_db
 from app.db.base import Base
-from app.models.enums import UserRole
+from app.models.enums import CredentialStatus, UserRole
 
 load_dotenv()
 
@@ -149,6 +149,7 @@ def mock_sign_repos(monkeypatch):
                 file_name="test.pdf",
                 file_download_url=None,
                 original_hash="750d2f7216e94d2c7f4f6e3b7b4c2d2a1f0e6a4e7f1b2c3d4e5f60718293a4b5c",
+                status=CredentialStatus.DRAFT,
             )
             self.key = SimpleNamespace(
                 id=1, storage_type="server", private_key_encrypted=b"ENCRYPTED"

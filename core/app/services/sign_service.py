@@ -16,7 +16,7 @@ from pyhanko.sign.timestamps import HTTPTimeStamper
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.enums import TargetResourceType
+from app.models.enums import CredentialStatus, TargetResourceType
 from app.repositories.certificate_repo import certificate_repo
 from app.repositories.credential_repo import credential_repo
 from app.repositories.key_repo import key_repo
@@ -44,6 +44,9 @@ class SignService:
         credential, key_record, cert_record = await self._get_and_validate_records(
             db, tenant_id, sign_data
         )
+
+        if credential.status != CredentialStatus.DRAFT:
+            raise ValueError("Chỉ có thể ký văn bằng ở trạng thái DRAFT.")
 
         if hashlib.sha256(pdf_bytes).hexdigest() != credential.original_hash:
             raise ValueError("Tệp PDF không khớp với credential đã đăng ký.")

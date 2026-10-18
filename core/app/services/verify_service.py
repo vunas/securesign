@@ -135,6 +135,25 @@ class VerifyService:
             vc = ValidationContext(trust_roots=trust_roots, other_certs=other_certs)
             result = await asyncio.to_thread(self._sync_verify_pdf_bytes, pdf_bytes, vc)
 
+            if credential and credential.tenant_id:
+                signer_cert_data = result.pop("_signer_cert_data", None)
+                if signer_cert_data:
+                    signer_cert_result = await db.execute(
+                        select(Certificate).where(Certificate.certificate_data == signer_cert_data)
+                    )
+                    signer_certificate = signer_cert_result.scalar_one_or_none()
+                    if signer_certificate and signer_certificate.tenant_id != credential.tenant_id:
+                        result.update(
+                            {
+                                "is_valid": False,
+                                "is_cert_valid": False,
+                                "message": (
+                                    "Chứng thư số không thuộc quyền sở hữu của tổ chức "
+                                    "phát hành văn bằng này."
+                                ),
+                            }
+                        )
+
             await log_service.log_action(
                 db=db,
                 tenant_id=tenant_id,
@@ -231,6 +250,7 @@ class VerifyService:
                 "is_cert_valid": status.valid,
                 "message": "Kiểm tra chữ ký thành công." if is_ok else "Chữ ký không hợp lệ.",
                 "signer_info": signer_info_dict,
+                "_signer_cert_data": signer_cert.dump() if signer_cert else None,
             }
 
 

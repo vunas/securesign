@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
+from app.models.enums import CredentialStatus
 from app.services.sign_service import SignService
 
 pytestmark = pytest.mark.asyncio
@@ -166,6 +167,7 @@ class TestSignServiceFlow:
             file_download_url=None,
             original_hash=hashlib.sha256(b"%PDF").hexdigest(),
             signed_hash=None,
+            status=CredentialStatus.DRAFT,
         )
         credential.mark_as_signed = lambda new_signed_hash: (
             setattr(credential, "signed_hash", new_signed_hash),

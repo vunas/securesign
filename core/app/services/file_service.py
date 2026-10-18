@@ -94,6 +94,7 @@ class FileService:
             file_download_url=None,  # Chuẩn Stateless: Không lưu path đĩa
             original_hash=original_hash,
             signed_hash=None,
+            status=CredentialStatus.DRAFT,
         )
 
         # Gán credential_id vào sign_data để liên kết bản ghi chữ ký
