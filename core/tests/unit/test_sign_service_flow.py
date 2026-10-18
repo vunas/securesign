@@ -1,3 +1,4 @@
+import hashlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -160,7 +161,11 @@ class TestSignServiceFlow:
     ):
         # Arrange
         credential = SimpleNamespace(
-            id=1, file_name="a.pdf", file_download_url=None, signed_hash=None
+            id=1,
+            file_name="a.pdf",
+            file_download_url=None,
+            original_hash=hashlib.sha256(b"%PDF").hexdigest(),
+            signed_hash=None,
         )
         credential.mark_as_signed = lambda new_signed_hash: (
             setattr(credential, "signed_hash", new_signed_hash),

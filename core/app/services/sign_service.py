@@ -45,6 +45,9 @@ class SignService:
             db, tenant_id, sign_data
         )
 
+        if hashlib.sha256(pdf_bytes).hexdigest() != credential.original_hash:
+            raise ValueError("Tệp PDF không khớp với credential đã đăng ký.")
+
         private_key = self._load_private_key(key_record, sign_data)
         end_entity_cert = self._load_certificate(cert_record)
         cert_registry = await self._build_certificate_registry(db)
@@ -116,29 +119,24 @@ class SignService:
         return credential, key_record, cert_record
 
     def _load_private_key(self, key_record, sign_data: SignatureCreate):
-        # 1. Luôn giải mã AES Master Key trước
         try:
-            priv_key_bytes = aes_service.decrypt_key(key_record.private_key_encrypted)
+            passphrase = getattr(sign_data, "passphrase", None)
+            if passphrase:
+                private_key_bytes = key_record.private_key_encrypted
+                password = passphrase.encode("utf-8")
+            else:
+                private_key_bytes = aes_service.decrypt_key(key_record.private_key_encrypted)
+                password = None
+
+            crypto_private_key = load_pem_private_key(private_key_bytes, password=password)
+            der_key_bytes = crypto_private_key.private_bytes(
+                encoding=serialization.Encoding.DER,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+            return keys.PrivateKeyInfo.load(der_key_bytes)
         except Exception as exc:
             raise ValueError("Mật khẩu giải mã khóa không đúng hoặc sai định dạng PEM.") from exc
-
-        # 2. Giải mã bằng Passphrase nếu có đặt mật khẩu phụ
-        try:
-            password = (
-                sign_data.passphrase.encode("utf-8")
-                if getattr(sign_data, "passphrase", None)
-                else None
-            )
-            crypto_priv_key = load_pem_private_key(priv_key_bytes, password=password)
-        except Exception:
-            raise ValueError("Mật khẩu giải mã khóa không đúng hoặc sai định dạng PEM.")
-
-        der_key_bytes = crypto_priv_key.private_bytes(
-            encoding=serialization.Encoding.DER,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption(),
-        )
-        return keys.PrivateKeyInfo.load(der_key_bytes)
 
     def _load_certificate(self, cert_record):
         cert_bytes = getattr(cert_record, "certificate_data", None) or getattr(

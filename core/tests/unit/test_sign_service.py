@@ -1,3 +1,4 @@
+import hashlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -31,10 +32,12 @@ async def test_sign_pdf_local_key_requires_raw_private_key(mock_sign_repos):
     """
     svc = SignService()
 
+    mock_sign_repos.credential.original_hash = hashlib.sha256(b"%PDF").hexdigest()
     mock_sign_repos.key.storage_type = "local"
     mock_sign_repos.key.private_key_encrypted = b""
     mock_sign_repos.apply()
 
+    mock_sign_repos.credential.original_hash = hashlib.sha256(b"%PDF").hexdigest()
     sign_data = SimpleNamespace(
         credential_id=mock_sign_repos.credential.id,
         key_id=mock_sign_repos.key.id,
@@ -57,6 +60,7 @@ async def test_sign_pdf_invalid_passphrase_maps_to_value_error(mock_sign_repos, 
     svc = SignService()
 
     # Dùng default setup (Server Storage)
+    mock_sign_repos.credential.original_hash = hashlib.sha256(b"%PDF").hexdigest()
     mock_sign_repos.apply()
     monkeypatch.setattr("app.services.sign_service.log_service.log_action", AsyncMock())
 

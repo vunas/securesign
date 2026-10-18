@@ -13,12 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.certificate import Certificate
 from app.models.credential import Credential
-from app.models.enums import ActionStatus, CertType, TargetResourceType
+from app.models.enums import ActionStatus, CertType, CredentialStatus, TargetResourceType
 from app.services.log_service import log_service
 from app.services.verify_log_service import verify_log_service
 
 
 class VerifyService:
+    MAX_FILE_SIZE = 20 * 1024 * 1024
+
     async def verify_pdf_signature(
         self,
         db: AsyncSession,
@@ -28,13 +30,16 @@ class VerifyService:
     ):
         """Xác thực chữ ký số PAdES hoàn toàn trên bộ nhớ RAM (Stateless)."""
         if isinstance(file, UploadFile):
-            pdf_bytes = await file.read()
+            pdf_bytes = await file.read(self.MAX_FILE_SIZE + 1)
             filename = file.filename
         elif isinstance(file, (bytes, bytearray)):
             pdf_bytes = bytes(file)
             filename = "uploaded_document.pdf"
         else:
             raise ValueError("Cần cung cấp dữ liệu PDF hợp lệ để xác thực.")
+
+        if len(pdf_bytes) > self.MAX_FILE_SIZE:
+            raise ValueError("Tệp PDF vượt quá giới hạn 20 MB.")
 
         if not pdf_bytes:
             msg = "File PDF tải lên bị rỗng (0 bytes)."
@@ -77,6 +82,28 @@ class VerifyService:
             credential = credential_result.scalar_one_or_none()
             tracking_id = credential.tracking_id if credential else None
             credential_id = credential.id if credential else None
+            if credential and credential.status == CredentialStatus.REVOKED:
+                msg = "Văn bằng đã bị thu hồi."
+                await verify_log_service.create_verify_log(
+                    db=db,
+                    tenant_id=tenant_id,
+                    tracking_id=tracking_id,
+                    credential_id=credential_id,
+                    signature_id=None,
+                    verified_by_user_id=user_id,
+                    is_valid=False,
+                    is_integrity_valid=False,
+                    is_cert_valid=False,
+                    message=msg,
+                )
+                return {
+                    "is_valid": False,
+                    "is_integrity_valid": False,
+                    "is_cert_valid": False,
+                    "is_not_revoked": False,
+                    "message": msg,
+                    "signer_info": None,
+                }
             root_result = await db.execute(
                 select(Certificate).filter(Certificate.cert_type == CertType.ROOT)
             )

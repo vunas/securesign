@@ -23,10 +23,10 @@ async def sign_credential(
     raw_private_key: str | None = Form(None),
 ):
     """Ký số lên tài liệu PDF bằng cách tương tác với hệ thống PKI nội bộ."""
-    try:
-        if file.content_type != "application/pdf":
-            raise HTTPException(status_code=400, detail="Vui lòng tải lên file định dạng PDF.")
+    if file.content_type != "application/pdf":
+        raise HTTPException(status_code=400, detail="Vui lòng tải lên file định dạng PDF.")
 
+    try:
         pdf_bytes = await file.read()
         sign_data = SignatureCreate(
             credential_id=credential_id,

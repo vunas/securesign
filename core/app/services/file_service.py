@@ -5,7 +5,7 @@ from datetime import date
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.enums import TargetResourceType
+from app.models.enums import CredentialStatus, TargetResourceType
 from app.repositories.credential_repo import credential_repo
 from app.schemas.signature_schema import SignatureCreate
 from app.services.log_service import log_service
@@ -39,6 +39,7 @@ class FileService:
             file_download_url=None,
             original_hash=original_hash,
             signed_hash=None,
+            status=CredentialStatus.DRAFT,
         )
         await log_service.log_action(
             db=db,
