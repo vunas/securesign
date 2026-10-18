@@ -7,7 +7,7 @@ from app.models.signature import HashAlgo, SignatureAlgo
 
 
 class SignatureCreate(BaseModel):
-    document_id: int
+    credential_id: int
     key_id: int
     signer_name: str
     signer_reason: Optional[str] = "Xác nhận tài liệu"
@@ -21,8 +21,8 @@ class SignatureCreate(BaseModel):
 
 class SignatureResponse(BaseModel):
     id: int
-    document_id: int
-    user_id: int
+    credential_id: int
+    user_id: Optional[int] = None
     hash_algorithm: HashAlgo
     signature_algorithm: SignatureAlgo
     signer_name: str

@@ -1,6 +1,8 @@
 import pytest
 
 from app.core.security import get_password_hash
+from app.models.enums import TenantStatus, UserRole
+from app.models.tenant import Tenant
 from app.models.user import User
 
 pytestmark = pytest.mark.asyncio
@@ -9,7 +11,21 @@ pytestmark = pytest.mark.asyncio
 @pytest.mark.integration
 async def test_login_sets_http_only_cookies(client_full, db_session):
     # Validates: /auth/login authenticates and sets access/refresh cookies.
-    u = User(username="alice", password_hash=get_password_hash("secret"), is_active=True)
+    tenant = Tenant(
+        tenant_code="AUTH1",
+        name="Auth Tenant",
+        email="auth1@example.com",
+        status=TenantStatus.ACTIVE,
+    )
+    db_session.add(tenant)
+    await db_session.flush()
+    u = User(
+        username="alice",
+        password_hash=get_password_hash("secret"),
+        tenant_id=tenant.id,
+        role=UserRole.TENANT_OPERATOR,
+        is_active=True,
+    )
     db_session.add(u)
     await db_session.commit()
 
@@ -30,7 +46,21 @@ async def test_login_sets_http_only_cookies(client_full, db_session):
 @pytest.mark.integration
 async def test_login_wrong_password_returns_401(client_full, db_session):
     # Validates: wrong password is rejected deterministically.
-    u = User(username="bob", password_hash=get_password_hash("secret"), is_active=True)
+    tenant = Tenant(
+        tenant_code="AUTH2",
+        name="Auth Tenant 2",
+        email="auth2@example.com",
+        status=TenantStatus.ACTIVE,
+    )
+    db_session.add(tenant)
+    await db_session.flush()
+    u = User(
+        username="bob",
+        password_hash=get_password_hash("secret"),
+        tenant_id=tenant.id,
+        role=UserRole.TENANT_OPERATOR,
+        is_active=True,
+    )
     db_session.add(u)
     await db_session.commit()
 

@@ -16,7 +16,7 @@ class KeyCreate(BaseModel):
 
 class KeyResponse(BaseModel):
     id: int
-    user_id: int
+    tenant_id: int
     key_name: str
     key_size: int
     algorithm: SignatureAlgo

@@ -42,8 +42,16 @@ class CertificateService:
                 priv_key_bytes = aes_service.decrypt_key(key_record.private_key_encrypted)
                 return load_pem_private_key(priv_key_bytes, password=None)
 
-    async def create_root_ca(self, db: AsyncSession, user_id: int, cert_data: CertificateCreate):
-        key_record = await key_repo.get_by_id(db, cert_data.key_id, user_id)
+    async def create_root_ca(
+        self,
+        db: AsyncSession,
+        tenant_id: int | None = None,
+        cert_data: CertificateCreate | None = None,
+        user_id: int | None = None,
+    ):
+        if tenant_id is None:
+            raise ValueError("Tenant ID là bắt buộc đối với dịch vụ mật mã PKI.")
+        key_record = await key_repo.get_by_id(db, cert_data.key_id, tenant_id)
         private_key = self._get_private_key(key_record)
         public_key = load_pem_public_key(key_record.public_key)
 
@@ -84,6 +92,7 @@ class CertificateService:
 
         created_cert = await certificate_repo.create(
             db=db,
+            tenant_id=tenant_id,
             user_id=user_id,
             key_id=key_record.id,
             cert_name=cert_data.cert_name,
@@ -99,21 +108,33 @@ class CertificateService:
 
         await log_service.log_action(
             db=db,
+            tenant_id=tenant_id,
             user_id=user_id,
             action="CREATE_ROOT_CA",
             target_type=TargetResourceType.CERTIFICATE,
             target_id=str(created_cert.id),
-            payload={"serial": str(certificate.serial_number), "subject": cert_data.subject},
+            payload={
+                "serial": str(certificate.serial_number),
+                "subject": cert_data.subject,
+            },
         )
         return created_cert
 
     async def create_signed_cert(
-        self, db: AsyncSession, user_id: int, cert_data: CertificateCreate, issuer_cert
+        self,
+        db: AsyncSession,
+        tenant_id: int | None = None,
+        cert_data: CertificateCreate | None = None,
+        issuer_cert=None,
+        user_id: int | None = None,
     ):
-        user_key_record = await key_repo.get_by_id(db, cert_data.key_id, user_id)
+        if tenant_id is None:
+            raise ValueError("Tenant ID là bắt buộc đối với dịch vụ mật mã PKI.")
+        user_key_record = await key_repo.get_by_id(db, cert_data.key_id, tenant_id)
         user_public_key = load_pem_public_key(user_key_record.public_key)
 
-        issuer_key_record = await key_repo.get_by_id(db, issuer_cert.key_id, issuer_cert.user_id)
+        issuer_tenant_id = getattr(issuer_cert, "tenant_id", None) or tenant_id
+        issuer_key_record = await key_repo.get_by_id(db, issuer_cert.key_id, issuer_tenant_id)
         issuer_private_key = self._get_private_key(issuer_key_record)
         issuer_x509 = x509.load_der_x509_certificate(issuer_cert.certificate_data)
 
@@ -182,6 +203,7 @@ class CertificateService:
 
         created_cert = await certificate_repo.create(
             db=db,
+            tenant_id=tenant_id,
             user_id=user_id,
             key_id=user_key_record.id,
             cert_name=cert_data.cert_name,
@@ -197,11 +219,15 @@ class CertificateService:
 
         await log_service.log_action(
             db=db,
+            tenant_id=tenant_id,
             user_id=user_id,
             action="CREATE_SIGNED_CERT",
             target_type=TargetResourceType.CERTIFICATE,
             target_id=str(created_cert.id),
-            payload={"serial": str(certificate.serial_number), "type": cert_data.cert_type},
+            payload={
+                "serial": str(certificate.serial_number),
+                "type": cert_data.cert_type,
+            },
         )
         return created_cert
 
@@ -226,7 +252,9 @@ class CertificateService:
         tsa_cert = result.scalars().first()
         if not tsa_cert:
             return None, None
-        tsa_key = await key_repo.get_by_id(db, tsa_cert.key_id, tsa_cert.user_id)
+        tsa_key = await key_repo.get_by_id(
+            db, tsa_cert.key_id, getattr(tsa_cert, "tenant_id", None)
+        )
         return tsa_cert, tsa_key
 
 

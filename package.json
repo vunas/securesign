@@ -4,12 +4,13 @@
   "packageManager": "pnpm@12.11.2",
   "scripts": {
     "dev": "concurrently -n \"CORE,WEB\" -c \"green,cyan\" \"pnpm dev:core\" \"pnpm dev:web\"",
-    "dev:core": "uv run --directory core uvicorn app.main:app --reload --port 8000",
+    "dev:core": "uv run --directory core python -m uvicorn app.main:app --reload --port 8000",
     "dev:web": "pnpm --filter web dev",
     "build:web": "pnpm --filter web build",
     "lint:web": "pnpm --filter web lint",
     "lint:core": "uv run --directory core ruff check .",
-    "test:core": "uv run --directory core pytest"
+    "test:core": "uv run --directory core pytest",
+    "seed:core": "uv run --directory core python -m app.db.seed.seed_data --force"
   },
   "devDependencies": {
     "concurrently": "^10.0.6"

@@ -17,10 +17,10 @@ async def generate_new_key(
     current_user: CurrentUserDep,
 ):
     """Tạo một cặp khóa RSA mới và lưu trên Server."""
-    return await key_service.create_key(db, current_user.id, key_data)
+    return await key_service.create_key(db, current_user.tenant_id, key_data)
 
 
 @router.get("/", response_model=List[KeyResponse])
 async def get_my_keys(db: DatabaseDep, current_user: CurrentUserDep):
     """Lấy danh sách các khóa của tôi."""
-    return await key_repo.get_all_by_user(db, current_user.id)
+    return await key_repo.get_all_by_tenant(db, current_user.tenant_id)

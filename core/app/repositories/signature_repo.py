@@ -5,8 +5,8 @@ from app.models.signature import Signature
 
 
 class SignatureRepository:
-    async def get_by_document(self, db: AsyncSession, document_id: int):
-        stmt = select(Signature).where(Signature.document_id == document_id)
+    async def get_by_credential(self, db: AsyncSession, credential_id: int):
+        stmt = select(Signature).where(Signature.credential_id == credential_id)
         result = await db.execute(stmt)
         return result.scalars().all()
 

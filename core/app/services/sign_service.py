@@ -1,8 +1,8 @@
 import asyncio
 import hashlib
+import io
 import logging
 import os
-import tempfile
 from datetime import datetime
 
 import httpx
@@ -16,42 +16,50 @@ from pyhanko.sign.timestamps import HTTPTimeStamper
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# Centralized Enums
-from app.models.enums import TargetResourceType
+from app.models.enums import CredentialStatus, TargetResourceType
 from app.repositories.certificate_repo import certificate_repo
-from app.repositories.document_repo import document_repo
+from app.repositories.credential_repo import credential_repo
 from app.repositories.key_repo import key_repo
 from app.repositories.signature_repo import signature_repo
 from app.schemas.signature_schema import SignatureCreate
 from app.services.crypto.aes_service import aes_service
 from app.services.log_service import log_service
-from app.utils.file_utils import (
-    get_file_content,
-    get_signed_file_path,
-    save_signed_file_content,
-)
 
 
 class SignService:
-    async def sign_pdf(self, db: AsyncSession, user_id: int, sign_data: SignatureCreate):
-        """Thực hiện nhúng chữ ký số chuẩn PAdES vào tệp PDF (Bất đồng bộ)."""
+    async def sign_pdf(
+        self,
+        db: AsyncSession,
+        pdf_bytes: bytes,
+        tenant_id: int,
+        sign_data: SignatureCreate,
+        user_id: int | None = None,
+    ) -> tuple[bytes, str]:
+        """Thực hiện nhúng chữ ký số PAdES vào tệp PDF trên bộ nhớ tạm (Stateless)."""
+        if not pdf_bytes:
+            raise ValueError("PDF payload không được rỗng.")
+        if tenant_id is None:
+            raise ValueError("Tenant ID là bắt buộc.")
 
-        doc, key_record, cert_record = await self._get_and_validate_records(db, user_id, sign_data)
+        credential, key_record, cert_record = await self._get_and_validate_records(
+            db, tenant_id, sign_data
+        )
 
-        input_db_path = doc.signed_file_path or doc.original_file_path
-        output_db_path = get_signed_file_path(doc.file_name, input_db_path)
+        if credential.status != CredentialStatus.DRAFT:
+            raise ValueError("Chỉ có thể ký văn bằng ở trạng thái DRAFT.")
+
+        if hashlib.sha256(pdf_bytes).hexdigest() != credential.original_hash:
+            raise ValueError("Tệp PDF không khớp với credential đã đăng ký.")
 
         private_key = self._load_private_key(key_record, sign_data)
         end_entity_cert = self._load_certificate(cert_record)
         cert_registry = await self._build_certificate_registry(db)
-
         timestamper = await self._setup_timestamper()
 
-        # Thực thi xử lý PDF nặng thông qua ThreadPool
-        new_signed_hash = await asyncio.to_thread(
+        # Xử lý ký số trong RAM qua ThreadPool để tránh nghẽn Event Loop
+        signed_pdf_bytes, new_signed_hash = await asyncio.to_thread(
             self._execute_pdf_signing,
-            input_db_path=input_db_path,
-            output_db_path=output_db_path,
+            pdf_bytes=pdf_bytes,
             private_key=private_key,
             end_entity_cert=end_entity_cert,
             cert_registry=cert_registry,
@@ -59,11 +67,13 @@ class SignService:
             sign_data=sign_data,
         )
 
-        doc.mark_as_signed(new_signed_path=output_db_path, new_signed_hash=new_signed_hash)
+        # Cập nhật mã băm đối soát vào sổ cái
+        credential.mark_as_signed(new_signed_hash)
 
+        # Tạo bản ghi chữ ký phục vụ kiểm toán
         signature_record = await signature_repo.create(
             db=db,
-            document_id=doc.id,
+            credential_id=credential.id,
             key_id=key_record.id,
             certificate_id=cert_record.id,
             user_id=user_id,
@@ -75,69 +85,68 @@ class SignService:
 
         await log_service.log_action(
             db=db,
+            tenant_id=tenant_id,
             user_id=user_id,
             action="SIGN_DOCUMENT",
             target_type=TargetResourceType.SIGNATURE,
             target_id=str(signature_record.id),
-            payload={"document_id": doc.id, "signer_name": sign_data.signer_name},
+            payload={
+                "credential_id": credential.id,
+                "signer_name": sign_data.signer_name,
+            },
         )
 
-        return signature_record
+        return signed_pdf_bytes, new_signed_hash
 
     async def _get_and_validate_records(
-        self, db: AsyncSession, user_id: int, sign_data: SignatureCreate
+        self,
+        db: AsyncSession,
+        tenant_id: int,
+        sign_data: SignatureCreate,
     ):
-        doc = await document_repo.get_by_id(db, sign_data.document_id, user_id)
-        key_record = await key_repo.get_by_id(db, sign_data.key_id, user_id)
+        credential = await credential_repo.get_by_id(db, sign_data.credential_id, tenant_id)
+        key_record = await key_repo.get_by_id(db, sign_data.key_id, tenant_id)
 
         cert_record = None
         if key_record:
-            cert_record = await certificate_repo.get_by_key_id(db, key_record.id)
+            cert_record = await certificate_repo.get_by_key_id(db, key_record.id, tenant_id)
 
-        if not doc or not key_record or not cert_record:
-            raise ValueError("Không tìm thấy tài liệu, khóa hoặc chứng thư số tương ứng.")
+        if not credential or not key_record or not cert_record:
+            raise ValueError(
+                "Không tìm thấy tài liệu/credential, khóa hoặc chứng thư số tương ứng của tenant."
+            )
 
-        # Check tính hợp lệ của cert
         if not cert_record.is_valid_now():
             raise ValueError("Chứng chỉ không hợp lệ hoặc đã hết hạn.")
 
-        return doc, key_record, cert_record
+        return credential, key_record, cert_record
 
     def _load_private_key(self, key_record, sign_data: SignatureCreate):
-        storage_type = getattr(key_record.storage_type, "value", key_record.storage_type)
-        if storage_type == "local":
-            if not getattr(sign_data, "raw_private_key", None):
-                raise ValueError("Vui lòng đính kèm file Private Key (.pem) từ máy của bạn để ký.")
-            priv_key_bytes = sign_data.raw_private_key.encode("utf-8")
-        else:
-            if getattr(sign_data, "passphrase", None):
-                priv_key_bytes = key_record.private_key_encrypted
-            else:
-                priv_key_bytes = aes_service.decrypt_key(key_record.private_key_encrypted)
-
         try:
-            password = (
-                sign_data.passphrase.encode("utf-8")
-                if getattr(sign_data, "passphrase", None)
-                else None
-            )
-            crypto_priv_key = load_pem_private_key(priv_key_bytes, password=password)
-        except Exception:
-            raise ValueError("Mật khẩu giải mã khóa không hợp lệ hoặc sai định dạng khóa.")
+            passphrase = getattr(sign_data, "passphrase", None)
+            if passphrase:
+                private_key_bytes = key_record.private_key_encrypted
+                password = passphrase.encode("utf-8")
+            else:
+                private_key_bytes = aes_service.decrypt_key(key_record.private_key_encrypted)
+                password = None
 
-        der_key_bytes = crypto_priv_key.private_bytes(
-            encoding=serialization.Encoding.DER,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption(),
-        )
-        return keys.PrivateKeyInfo.load(der_key_bytes)
+            crypto_private_key = load_pem_private_key(private_key_bytes, password=password)
+            der_key_bytes = crypto_private_key.private_bytes(
+                encoding=serialization.Encoding.DER,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+            return keys.PrivateKeyInfo.load(der_key_bytes)
+        except Exception as exc:
+            raise ValueError("Mật khẩu giải mã khóa không đúng hoặc sai định dạng PEM.") from exc
 
     def _load_certificate(self, cert_record):
         cert_bytes = getattr(cert_record, "certificate_data", None) or getattr(
             cert_record, "certificate_pem", None
         )
         if not cert_bytes:
-            raise ValueError("Không tìm thấy dữ liệu chứng chỉ trong Database.")
+            raise ValueError("Không tìm thấy dữ liệu chứng chỉ trong cơ sở dữ liệu.")
 
         if isinstance(cert_bytes, str):
             cert_bytes = cert_bytes.encode("utf-8")
@@ -179,82 +188,58 @@ class SignService:
 
     def _execute_pdf_signing(
         self,
-        input_db_path,
-        output_db_path,
+        pdf_bytes: bytes,
         private_key,
         end_entity_cert,
         cert_registry,
         timestamper,
         sign_data: SignatureCreate,
-    ) -> str:
-        """Thực hiện ký và trả về mã băm file mới."""
-        tmp_in = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        tmp_out = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        new_hash = None
+    ) -> tuple[bytes, str]:
+        """Ký số PDF trực tiếp trên RAM buffers theo chuẩn PAdES."""
+        input_buffer = io.BytesIO(pdf_bytes)
+        output_buffer = io.BytesIO()
+
+        signer = signers.SimpleSigner(
+            signing_cert=end_entity_cert, signing_key=private_key, cert_registry=cert_registry
+        )
+        pdf_writer = IncrementalPdfFileWriter(input_buffer, strict=False)
+        metadata = signers.PdfSignatureMetadata(
+            field_name=f"Sig_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+            location=sign_data.signer_location,
+            reason=sign_data.signer_reason,
+            name=sign_data.signer_name,
+            subfilter=SigSeedSubFilter.PADES,
+            embed_validation_info=False,
+        )
 
         try:
-            file_bytes = get_file_content(input_db_path)
-            tmp_in.write(file_bytes)
-            tmp_in.flush()
-
-            signer = signers.SimpleSigner(
-                signing_cert=end_entity_cert, signing_key=private_key, cert_registry=cert_registry
+            signers.sign_pdf(
+                pdf_writer,
+                metadata,
+                signer=signer,
+                timestamper=timestamper,
+                existing_fields_only=False,
+                in_place=False,
+                output=output_buffer,
+            )
+        except Exception:
+            if not timestamper:
+                raise
+            # Fallback nếu TSA lỗi
+            input_buffer.seek(0)
+            output_buffer = io.BytesIO()
+            signers.sign_pdf(
+                IncrementalPdfFileWriter(input_buffer, strict=False),
+                metadata,
+                signer=signer,
+                timestamper=None,
+                existing_fields_only=False,
+                in_place=False,
+                output=output_buffer,
             )
 
-            with open(tmp_in.name, "rb") as input_file:
-                pdf_writer = IncrementalPdfFileWriter(input_file, strict=False)
-                new_sig_field_name = f"Sig_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-
-                meta = signers.PdfSignatureMetadata(
-                    field_name=new_sig_field_name,
-                    location=sign_data.signer_location,
-                    reason=sign_data.signer_reason,
-                    name=sign_data.signer_name,
-                    subfilter=SigSeedSubFilter.PADES,
-                    embed_validation_info=False,
-                )
-
-                with open(tmp_out.name, "wb") as output_file:
-                    try:
-                        signers.sign_pdf(
-                            pdf_writer,
-                            meta,
-                            signer=signer,
-                            timestamper=timestamper,
-                            existing_fields_only=False,
-                            in_place=False,
-                            output=output_file,
-                        )
-                    except Exception as e:
-                        if timestamper:
-                            input_file.seek(0)
-                            pdf_writer = IncrementalPdfFileWriter(input_file, strict=False)
-                            signers.sign_pdf(
-                                pdf_writer,
-                                meta,
-                                signer=signer,
-                                timestamper=None,
-                                existing_fields_only=False,
-                                in_place=False,
-                                output=output_file,
-                            )
-                        else:
-                            raise e
-
-            with open(tmp_out.name, "rb") as f:
-                signed_content = f.read()
-                save_signed_file_content(output_db_path, signed_content)
-                new_hash = hashlib.sha256(signed_content).hexdigest()
-
-        finally:
-            tmp_in.close()
-            tmp_out.close()
-            if os.path.exists(tmp_in.name):
-                os.remove(tmp_in.name)
-            if os.path.exists(tmp_out.name):
-                os.remove(tmp_out.name)
-
-        return new_hash
+        signed_content = output_buffer.getvalue()
+        return signed_content, hashlib.sha256(signed_content).hexdigest()
 
 
 sign_service = SignService()

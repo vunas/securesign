@@ -16,7 +16,8 @@ class VerifyResponse(BaseModel):
     is_valid: bool
     is_integrity_valid: Optional[bool] = None
     is_cert_valid: Optional[bool] = None
+    is_not_revoked: Optional[bool] = None
 
     message: str
     signer_info: Optional[SignerInfoSchema] = None
-    document_hash: Optional[str] = None
+    credential_hash: Optional[str] = None

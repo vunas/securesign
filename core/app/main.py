@@ -12,8 +12,8 @@ from app.core.middleware import LoggingMiddleware
 from app.routers import (
     auth_router,
     certificate_router,
+    credential_router,
     dashboard_router,
-    document_router,
     key_router,
     log_router,
     signature_router,
@@ -65,7 +65,7 @@ app.include_router(auth_router.router)
 app.include_router(key_router.router)
 app.include_router(certificate_router.router)
 app.include_router(verify_router.router)
-app.include_router(document_router.router)
+app.include_router(credential_router.router)
 app.include_router(dashboard_router.router)
 app.include_router(signature_router.router)
 app.include_router(log_router.router)

@@ -25,7 +25,9 @@ class AuditLogResponse(BaseModel):
 
 class VerifyLogResponse(BaseModel):
     id: int
-    document_id: Optional[int]
+    tenant_id: Optional[int]
+    credential_id: Optional[int]
+    tracking_id: Optional[str]
     signature_id: Optional[int]
     verified_by_user_id: Optional[int]
     is_valid: bool
@@ -34,6 +36,8 @@ class VerifyLogResponse(BaseModel):
     is_not_revoked: Optional[bool]
     message: Optional[str]
     signer_snapshot: Optional[Dict[str, Any]]
+    ip_address: Optional[str]
+    user_agent: Optional[str]
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

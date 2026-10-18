@@ -10,15 +10,14 @@ from app.services.key_service import key_service
 async def seed_pki(db: AsyncSession, users: dict):
     print("🔑 Đang tạo Hệ thống PKI...")
 
-    admin = users["admin"]
-    giamdoc = users["giamdoc"]
+    tenant_id = users["tenant"].id
 
     root_key = await key_service.create_key(
-        db, admin.id, KeyCreate(key_name="Root CA Key", key_size=2048)
+        db, tenant_id, KeyCreate(key_name="Root CA Key", key_size=2048)
     )
     root_cert = await certificate_service.create_root_ca(
         db,
-        admin.id,
+        tenant_id,
         CertificateCreate(
             cert_name="SecureSign Root CA",
             key_id=root_key.id,
@@ -38,11 +37,11 @@ async def seed_pki(db: AsyncSession, users: dict):
     print("  -> Đã tạo Root CA")
 
     inter_key = await key_service.create_key(
-        db, admin.id, KeyCreate(key_name="Intermediate CA Key", key_size=2048)
+        db, tenant_id, KeyCreate(key_name="Intermediate CA Key", key_size=2048)
     )
     inter_cert = await certificate_service.create_signed_cert(
         db,
-        admin.id,
+        tenant_id,
         CertificateCreate(
             cert_name="SecureSign Intermediate CA",
             key_id=inter_key.id,
@@ -63,11 +62,11 @@ async def seed_pki(db: AsyncSession, users: dict):
     print("  -> Đã tạo Intermediate CA")
 
     tsa_key = await key_service.create_key(
-        db, admin.id, KeyCreate(key_name="Internal TSA Key", key_size=2048)
+        db, tenant_id, KeyCreate(key_name="Internal TSA Key", key_size=2048)
     )
     tsa_cert = await certificate_service.create_signed_cert(
         db,
-        admin.id,
+        tenant_id,
         CertificateCreate(
             cert_name="SecureSign Internal TSA",
             key_id=tsa_key.id,
@@ -90,11 +89,11 @@ async def seed_pki(db: AsyncSession, users: dict):
     print("  -> Đã tạo TSA Certificate")
 
     user_key = await key_service.create_key(
-        db, giamdoc.id, KeyCreate(key_name="Khóa Ký Hợp Đồng", key_size=2048)
+        db, tenant_id, KeyCreate(key_name="Khóa Ký Hợp Đồng", key_size=2048)
     )
     user_cert = await certificate_service.create_signed_cert(
         db,
-        giamdoc.id,
+        tenant_id,
         CertificateCreate(
             cert_name="Chứng chỉ Giám Đốc Nguyễn",
             key_id=user_key.id,

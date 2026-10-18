@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user, get_db
 from app.models.user import User
-from app.repositories.document_repo import document_repo
+from app.repositories.credential_repo import credential_repo
 from app.repositories.key_repo import key_repo
 from app.repositories.signature_repo import signature_repo
 
@@ -19,13 +19,13 @@ async def get_dashboard_summary(
     """
     API cung cấp toàn bộ dữ liệu thống kê cho giao diện Dashboard HTML.
     """
-    keys = await key_repo.get_all_by_user(db, current_user.id)
-    docs = await document_repo.get_all_by_user(db, current_user.id)
+    keys = await key_repo.get_all_by_tenant(db, current_user.tenant_id)
+    docs = await credential_repo.get_all_by_tenant(db, current_user.tenant_id)
 
     signatures_list = []
-    for doc in docs:
-        doc_sigs = await signature_repo.get_by_document(db, doc.id)
-        for sig in doc_sigs:
+    for credential in docs:
+        credential_signatures = await signature_repo.get_by_credential(db, credential.id)
+        for sig in credential_signatures:
             sig_base64 = (
                 base64.b64encode(sig.signature_value).decode("utf-8")
                 if sig.signature_value
@@ -33,14 +33,14 @@ async def get_dashboard_summary(
             )
 
             key_name = "Khóa bị ẩn/xóa"
-            key = await key_repo.get_by_id(db, sig.key_id, current_user.id)
+            key = await key_repo.get_by_id(db, sig.key_id, current_user.tenant_id)
             if key:
                 key_name = key.key_name
 
             signatures_list.append(
                 {
                     "id": sig.id,
-                    "document_name": doc.file_name,
+                    "credential_name": credential.file_name,
                     "key_id": sig.key_id,
                     "key_name": key_name,
                     "signer": sig.signer_name,
@@ -55,7 +55,7 @@ async def get_dashboard_summary(
     return {
         "stats": {
             "total_keys": len(keys),
-            "total_docs": len(docs),
+            "total_credentials": len(docs),
             "total_sigs": len(signatures_list),
         },
         "keys": [
@@ -74,14 +74,14 @@ async def get_dashboard_summary(
             }
             for k in keys
         ],
-        "documents": [
+        "credentials": [
             {
-                "id": d.id,
-                "name": d.file_name,
-                "hash": d.file_hash,
-                "size": round(d.file_size / 1024, 2) if d.file_size else 0,
+                "id": credential.id,
+                "name": credential.file_name,
+                "hash": credential.original_hash,
+                "size": 0,
             }
-            for d in docs
+            for credential in docs
         ],
         "signatures": signatures_list,
     }

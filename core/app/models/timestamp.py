@@ -17,7 +17,9 @@ class Timestamp(Base):
     __tablename__ = "timestamps"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    signature_id: Mapped[int] = mapped_column(ForeignKey("signatures.id", ondelete="CASCADE"))
+    signature_id: Mapped[int] = mapped_column(
+        ForeignKey("signatures.id", ondelete="CASCADE"), index=True
+    )
 
     timestamp_token: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
     hashed_data: Mapped[Optional[str]] = mapped_column(Text)

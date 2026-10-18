@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import (
 
 from app.core.dependencies import get_current_user, get_db
 from app.db.base import Base
+from app.models.enums import CredentialStatus, UserRole
 
 load_dotenv()
 
@@ -98,7 +99,14 @@ async def client_full(fastapi_app_full: FastAPI):
 def override_current_user_full(fastapi_app_full: FastAPI):
     from app.models.user import User
 
-    user = User(id=999, username="test_enterprise_user", password_hash="hash", is_active=True)
+    user = User(
+        id=999,
+        username="test_enterprise_user",
+        password_hash="hash",
+        tenant_id=1,
+        role=UserRole.TENANT_OPERATOR,
+        is_active=True,
+    )
 
     def _override() -> User:
         return user
@@ -136,11 +144,12 @@ def mock_sign_repos(monkeypatch):
     class RepoMocker:
         def __init__(self):
             # Default Dummy Data
-            self.doc = SimpleNamespace(
+            self.credential = SimpleNamespace(
                 id=1,
                 file_name="test.pdf",
-                original_file_path="local:/tmp/test.pdf",
-                signed_file_path=None,
+                file_download_url=None,
+                original_hash="750d2f7216e94d2c7f4f6e3b7b4c2d2a1f0e6a4e7f1b2c3d4e5f60718293a4b5c",
+                status=CredentialStatus.DRAFT,
             )
             self.key = SimpleNamespace(
                 id=1, storage_type="server", private_key_encrypted=b"ENCRYPTED"
@@ -152,14 +161,15 @@ def mock_sign_repos(monkeypatch):
             )
 
         def set_not_found(self):
-            self.doc = None
+            self.credential = None
             self.key = None
             self.cert = None
 
         def apply(self, target_module: str = "app.services.sign_service"):
             # Tự động apply monkeypatch dựa trên state hiện tại của class
             monkeypatch.setattr(
-                f"{target_module}.document_repo.get_by_id", AsyncMock(return_value=self.doc)
+                f"{target_module}.credential_repo.get_by_id",
+                AsyncMock(return_value=self.credential),
             )
             monkeypatch.setattr(
                 f"{target_module}.key_repo.get_by_id", AsyncMock(return_value=self.key)

@@ -1,6 +1,19 @@
 import enum
 
 
+class TenantStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    ACTIVE = "ACTIVE"
+    REJECTED = "REJECTED"
+    SUSPENDED = "SUSPENDED"
+
+
+class UserRole(str, enum.Enum):
+    PLATFORM_SUPER_ADMIN = "PLATFORM_SUPER_ADMIN"
+    TENANT_ADMIN = "TENANT_ADMIN"
+    TENANT_OPERATOR = "TENANT_OPERATOR"
+
+
 class LogLevel(str, enum.Enum):
     INFO = "INFO"
     WARNING = "WARNING"
@@ -14,19 +27,17 @@ class ActionStatus(str, enum.Enum):
 
 
 class TargetResourceType(str, enum.Enum):
+    TENANT = "TENANT"
     USER = "USER"
     KEY = "KEY"
     CERTIFICATE = "CERTIFICATE"
-    DOCUMENT = "DOCUMENT"
+    CREDENTIAL = "CREDENTIAL"
     SIGNATURE = "SIGNATURE"
     SYSTEM = "SYSTEM"
 
 
 class KeyStorageType(str, enum.Enum):
     SERVER = "server"
-    USB_TOKEN = "usb_token"
-    HSM = "hsm"
-    LOCAL = "local"
 
 
 class SignatureAlgo(str, enum.Enum):
@@ -36,7 +47,6 @@ class SignatureAlgo(str, enum.Enum):
 
 class HashAlgo(str, enum.Enum):
     SHA_256 = "SHA-256"
-    SHA_512 = "SHA-512"
 
 
 class CertType(str, enum.Enum):
@@ -45,8 +55,11 @@ class CertType(str, enum.Enum):
     END_ENTITY = "end_entity"
 
 
-class DocumentStatus(str, enum.Enum):
-    UPLOADED = "UPLOADED"
-    SIGNED = "SIGNED"
-    VERIFIED = "VERIFIED"
-    INVALID = "INVALID"
+class CredentialStatus(str, enum.Enum):
+    DRAFT = "DRAFT"
+    ISSUED = "ISSUED"
+    REVOKED = "REVOKED"
+
+
+def enum_values(enum_type: type[enum.Enum]) -> list[str]:
+    return [member.value for member in enum_type]

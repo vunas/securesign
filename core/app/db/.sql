@@ -33,6 +33,7 @@ CREATE TYPE target_resource_type AS ENUM (
     'USER',
     'KEY',
     'CERTIFICATE',
+    'DOCUMENT',
     'CREDENTIAL',
     'SIGNATURE',
     'SYSTEM'
@@ -139,6 +140,7 @@ CREATE INDEX idx_api_keys_hash ON api_keys(key_hash);
 CREATE TABLE keys (
     id                    SERIAL PRIMARY KEY,
     tenant_id             INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE, -- Khóa thuộc sở hữu trường
+    user_id               INTEGER REFERENCES users(id) ON DELETE SET NULL,           -- Cán bộ khởi tạo khóa
     key_name              VARCHAR(100),
     public_key            BYTEA NOT NULL,
     private_key_encrypted BYTEA NOT NULL,             -- Khóa bí mật đã mã hóa bằng Master Key (AES-256-GCM)
@@ -152,11 +154,13 @@ CREATE TABLE keys (
 );
 
 CREATE INDEX idx_keys_tenant_id ON keys(tenant_id);
+CREATE INDEX idx_keys_user_id ON keys(user_id);
 
 -- 3.2. BẢNG CERTIFICATES (Chứng thư số X.509 chứng thực cho cặp khóa của Tenant)
 CREATE TABLE certificates (
     id               SERIAL PRIMARY KEY,
     tenant_id        INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    user_id          INTEGER REFERENCES users(id) ON DELETE SET NULL,
     key_id           INTEGER NOT NULL REFERENCES keys(id) ON DELETE CASCADE,
     cert_name        VARCHAR(100),
     serial_number    VARCHAR(100) UNIQUE,
@@ -174,6 +178,7 @@ CREATE TABLE certificates (
 );
 
 CREATE INDEX idx_cert_tenant_id ON certificates(tenant_id);
+CREATE INDEX idx_cert_user_id ON certificates(user_id);
 CREATE INDEX idx_cert_key_id ON certificates(key_id);
 
 -- 3.3. BẢNG CERTIFICATE_CHAINS (Lưu vết chuỗi chứng chỉ Intermediate & Root CA)
@@ -185,6 +190,8 @@ CREATE TABLE certificate_chains (
     created_at          TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX idx_cert_chains_cert_id ON certificate_chains(certificate_id);
+
 
 -- =============================================================================
 -- NHÓM 4: QUẢN LÝ VĂN BẰNG & CHỨNG CHỈ SỐ (VERIFIABLE CREDENTIALS)
@@ -193,30 +200,31 @@ CREATE TABLE certificate_chains (
 -- BẢNG CREDENTIALS (Lưu metadata văn bằng, mã băm đối soát Stateless & hỗ trợ quét QR)
 CREATE TABLE credentials (
     id                 SERIAL PRIMARY KEY,
-    tenant_id          INTEGER NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT, -- Ngăn xóa trường làm mất dữ liệu bằng
+    tenant_id          INTEGER NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
     created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     
     -- Định danh tra cứu công khai qua QR / Web Portal
-    tracking_id        VARCHAR(64) UNIQUE NOT NULL,      -- Mã UUIDv4 hoặc NanoID nhúng vào mã QR
-    credential_number  VARCHAR(100),                     -- Số hiệu văn bằng / Số vào sổ tốt nghiệp
+    tracking_id        VARCHAR(64) UNIQUE NOT NULL,      -- UUIDv4 / NanoID nhúng mã QR
+    credential_number  VARCHAR(100),                     -- Số hiệu văn bằng / Số quyết định / Số vào sổ
     
-    -- Metadata thông tin người thụ hưởng
-    student_name       VARCHAR(150) NOT NULL,
-    student_id         VARCHAR(50) NOT NULL,
-    major              VARCHAR(150),
-    issue_date         DATE NOT NULL,
-    metadata           JSONB,                            -- GPA, xếp loại tốt nghiệp, tên đề tài, khóa học...
+    -- Thông tin người thụ hưởng (Dùng chung cho sinh viên, nhân viên, học viên, cá nhân)
+    recipient_name     VARCHAR(150) NOT NULL,            -- Họ tên người nhận
+    recipient_id       VARCHAR(50),                      -- Mã SV, Mã nhân sự, CCCD hoặc Mã định danh
+    issue_date         DATE NOT NULL,                    -- Ngày ban hành / Ngày cấp
     
-    -- Bằng chứng mật mã (Triết lý Stateless: Chỉ lưu băm để kiểm chứng, không lưu file PDF nhạy cảm)
+    -- Dữ liệu linh hoạt theo từng tổ chức (Trường học: major, gpa; Công ty: department, position; Y tế: test_result...)
+    metadata           JSONB,
+    
+    -- Bằng chứng mật mã (Stateless: chỉ lưu băm đối soát, không lưu file PDF nhạy cảm)
     file_name          VARCHAR(255),
     original_hash      TEXT NOT NULL,                    -- H0: Mã băm SHA-256 trước khi ký
-    signed_hash        TEXT NOT NULL,                    -- Mã băm SHA-256 sau khi ký PAdES
-    file_download_url  TEXT,                             -- URL tải file tạm thời (nếu có)
+    signed_hash        TEXT,                             -- Mã băm SHA-256 sau khi ký PAdES (NULL khi còn DRAFT)
+    file_download_url  TEXT,
     
-    -- Trạng thái vòng đời & Thu hồi văn bằng (Revocation - UC-06)
+    -- Trạng thái vòng đời & Thu hồi văn bằng (Revocation)
     status             credential_status DEFAULT 'ISSUED',
     revocation_reason  TEXT,
-    revoked_at         TIMESTA0000000000000000000000MPTZ,
+    revoked_at         TIMESTAMPTZ,
     revoked_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     
     created_at         TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
@@ -229,14 +237,13 @@ FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- Chỉ mục phục vụ tra cứu
 CREATE INDEX idx_credentials_tracking_id ON credentials(tracking_id);
-CREATE INDEX idx_credentials_student_id ON credentials(student_id);
+CREATE INDEX idx_credentials_recipient_id ON credentials(recipient_id);
 CREATE INDEX idx_credentials_tenant_id ON credentials(tenant_id);
 CREATE INDEX idx_credentials_status ON credentials(status);
 
--- Chỉ mục mã băm: Cho phép Cổng thẩm tra kéo thả file (UC-05 Nhánh A) truy vấn tức thì O(1)
+-- Chỉ mục mã băm phục vụ Cổng thẩm tra kéo thả file
 CREATE INDEX idx_credentials_signed_hash ON credentials(signed_hash);
 CREATE INDEX idx_credentials_original_hash ON credentials(original_hash);
-
 
 -- =============================================================================
 -- NHÓM 5: CHỮ KÝ SỐ PAdES & MỘC THỜI GIAN (SIGNING ENGINE & TSA RFC 3161)
@@ -272,6 +279,8 @@ CREATE TABLE timestamps (
     created_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX idx_timestamps_signature_id ON timestamps(signature_id);
+
 
 -- =============================================================================
 -- NHÓM 6: THẨM ĐỊNH & NHẬT KÝ KIỂM TOÁN (VERIFICATION & AUDIT TRAIL)
@@ -280,14 +289,15 @@ CREATE TABLE timestamps (
 -- 6.1. BẢNG VERIFY_LOGS (Nhật ký các lượt thẩm tra từ công chúng và nhà tuyển dụng)
 CREATE TABLE verify_logs (
     id                  SERIAL PRIMARY KEY,
-    tenant_id           INTEGER REFERENCES tenants(id) ON DELETE SET NULL, -- Thống kê lượt quét của từng trường
-    tracking_id         VARCHAR(64),                                       -- Mã tracking của văn bằng được thẩm tra
+    tenant_id           INTEGER REFERENCES tenants(id) ON DELETE SET NULL,   -- Thống kê lượt quét của từng trường
+    credential_id       INTEGER REFERENCES credentials(id) ON DELETE SET NULL, -- Liên kết văn bằng cụ thể nếu tìm thấy
+    tracking_id         VARCHAR(64),                                         -- Mã tracking của văn bằng được thẩm tra
     signature_id        INTEGER REFERENCES signatures(id) ON DELETE SET NULL,
-    verified_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,   -- NULL nếu là khách vãng lai
-    is_valid            BOOLEAN NOT NULL,                                  -- Kết luận tổng quan tính hợp lệ
-    is_integrity_valid  BOOLEAN,                                           -- Tính toàn vẹn: Hash file có khớp không
-    is_cert_valid       BOOLEAN,                                           -- Chứng thư: Còn hạn và hợp lệ không
-    is_not_revoked      BOOLEAN,                                           -- Hiệu lực: Văn bằng có bị thu hồi không
+    verified_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,     -- NULL nếu là khách vãng lai
+    is_valid            BOOLEAN NOT NULL,                                    -- Kết luận tổng quan tính hợp lệ
+    is_integrity_valid  BOOLEAN,                                             -- Tính toàn vẹn: Hash file có khớp không
+    is_cert_valid       BOOLEAN,                                             -- Chứng thư: Còn hạn và hợp lệ không
+    is_not_revoked      BOOLEAN,                                             -- Hiệu lực: Văn bằng có bị thu hồi không
     message             TEXT,
     signer_snapshot     JSONB,
     ip_address          VARCHAR(50),
@@ -296,6 +306,7 @@ CREATE TABLE verify_logs (
 );
 
 CREATE INDEX idx_verify_logs_tenant_id ON verify_logs(tenant_id);
+CREATE INDEX idx_verify_logs_credential_id ON verify_logs(credential_id);
 CREATE INDEX idx_verify_logs_tracking_id ON verify_logs(tracking_id);
 CREATE INDEX idx_verify_logs_created_at ON verify_logs(created_at);
 

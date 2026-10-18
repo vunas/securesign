@@ -57,4 +57,24 @@ async def get_current_user(
     return user
 
 
+async def get_optional_current_user(
+    db: DatabaseDep,
+    access_token: Annotated[str | None, Cookie()] = None,
+) -> User | None:
+    if not access_token:
+        return None
+
+    try:
+        token = access_token.removeprefix("Bearer ")
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        username = payload.get("sub")
+        if not username:
+            return None
+        result = await db.execute(select(User).where(User.username == username))
+        user = result.scalar_one_or_none()
+        return user if user and user.is_active else None
+    except jwt.PyJWTError:
+        return None
+
+
 CurrentUserDep = Annotated[User, Depends(get_current_user)]

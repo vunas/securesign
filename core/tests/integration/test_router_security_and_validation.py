@@ -17,7 +17,7 @@ class TestRouterSecurityAndValidation:
             AsyncMock(
                 return_value=SimpleNamespace(
                     id=1,
-                    document_id=1,
+                    credential_id=1,
                     user_id=1,
                     hash_algorithm="SHA-256",
                     signature_algorithm="RSA",
@@ -28,7 +28,7 @@ class TestRouterSecurityAndValidation:
                 )
             ),
         )
-        payload = {"document_id": 1, "key_id": 2, "signer_name": "Alice"}
+        payload = {"credential_id": 1, "key_id": 2, "signer_name": "Alice"}
 
         # Act
         res = await client_full.post("/api/signatures/sign-pdf", json=payload)
@@ -42,7 +42,7 @@ class TestRouterSecurityAndValidation:
             raise HTTPException(status_code=403, detail="Forbidden")
 
         fastapi_app_full.dependency_overrides[get_current_user] = _forbidden
-        payload = {"document_id": 1, "key_id": 2, "signer_name": "Alice"}
+        payload = {"credential_id": 1, "key_id": 2, "signer_name": "Alice"}
 
         # Act
         res = await client_full.post("/api/signatures/sign-pdf", json=payload)
@@ -54,7 +54,7 @@ class TestRouterSecurityAndValidation:
         self, client_full, override_current_user_full
     ):
         # Arrange
-        invalid_payload = {"document_id": 1}  # thiếu key_id và signer_name
+        invalid_payload = {"credential_id": 1}  # thiếu key_id và signer_name
 
         # Act
         res = await client_full.post("/api/signatures/sign-pdf", json=invalid_payload)
