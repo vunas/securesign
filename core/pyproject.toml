@@ -14,7 +14,6 @@ dependencies = [
     "asn1crypto",
     "sqlalchemy[asyncio]>=2.1.4",
     "asyncpg",
-    "python-jose[cryptography]",
     "aiofiles",
     "requests",
     "httpx",
