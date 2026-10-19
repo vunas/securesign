@@ -10,6 +10,7 @@ from app.repositories.credential_repo import credential_repo
 from app.schemas.signature_schema import SignatureCreate
 from app.services.log_service import log_service
 from app.services.sign_service import sign_service
+from app.utils.file_utils import MAX_FILE_SIZE
 
 
 class FileService:
@@ -23,9 +24,16 @@ class FileService:
         """Create hash-only credential metadata without persisting PDF bytes."""
         if tenant_id is None:
             raise ValueError("Tenant ID là bắt buộc để tạo credential.")
-        pdf_bytes = await file.read()
+
+        # Đọc có giới hạn để bảo vệ RAM
+        pdf_bytes = await file.read(MAX_FILE_SIZE + 1)
+        if len(pdf_bytes) > MAX_FILE_SIZE:
+            raise ValueError("Dung lượng tệp vượt quá giới hạn cho phép (tối đa 20MB).")
         if not pdf_bytes:
             raise ValueError("Tệp PDF không được rỗng.")
+        if not pdf_bytes.startswith(b"%PDF-"):
+            raise ValueError("Tệp tải lên không đúng định dạng PDF.")
+
         original_hash = hashlib.sha256(pdf_bytes).hexdigest()
         credential = await credential_repo.create(
             db=db,
@@ -69,8 +77,10 @@ class FileService:
         if tenant_id is None:
             raise ValueError("Tenant ID là bắt buộc.")
 
-        # 1. Đọc nội dung file vào RAM
-        pdf_bytes = await file.read()
+        # 1. Đọc nội dung file vào RAM có giới hạn
+        pdf_bytes = await file.read(MAX_FILE_SIZE + 1)
+        if len(pdf_bytes) > MAX_FILE_SIZE:
+            raise ValueError("Dung lượng tệp vượt quá giới hạn cho phép (tối đa 20MB).")
         if not pdf_bytes:
             raise ValueError("Tệp PDF không được rỗng.")
         if not pdf_bytes.startswith(b"%PDF-"):

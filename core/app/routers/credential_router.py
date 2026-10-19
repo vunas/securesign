@@ -26,6 +26,8 @@ async def upload_credential(
             db, current_user.id, file, tenant_id=current_user.tenant_id
         )
         return credential
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi upload: {str(e)}")
 

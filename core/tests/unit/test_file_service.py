@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.services.file_service import FileService
+from app.utils.file_utils import MAX_FILE_SIZE
 
 pytestmark = pytest.mark.asyncio
 
@@ -21,14 +22,16 @@ class DummyUploadFile:
         self._content = content
 
     async def read(self, size: int = -1) -> bytes:
+        if size > 0 and len(self._content) > size:
+            return self._content[:size]
         return self._content
 
 
 @pytest.mark.unit
 async def test_upload_credential_hash_is_computed(monkeypatch):
     """
-    Validates: FileService tính toán chính xác sha256 hash và file_size
-    dựa trên bytes đọc được từ file upload.
+    Validates: FileService tính toán chính xác sha256 hash và metadata
+    dựa trên bytes đọc được từ file upload hợp lệ (%PDF-).
     """
     created_db_record = {}
 
@@ -43,35 +46,63 @@ async def test_upload_credential_hash_is_computed(monkeypatch):
     monkeypatch.setattr("app.services.file_service.log_service.log_action", AsyncMock())
 
     svc = FileService()
-    f = DummyUploadFile("doc.pdf", "application/pdf", b"ABC")
+    # Dùng nội dung bắt đầu bằng header PDF hợp lệ
+    dummy_pdf_content = b"%PDF-1.4 valid mock header and content"
+    f = DummyUploadFile("doc.pdf", "application/pdf", dummy_pdf_content)
     credential = await svc.upload_credential(db=object(), user_id=10, file=f, tenant_id=1)
 
     assert credential.tenant_id == 1
-    assert created_db_record["original_hash"] == hashlib.sha256(b"ABC").hexdigest()
+    assert created_db_record["original_hash"] == hashlib.sha256(dummy_pdf_content).hexdigest()
     assert created_db_record["signed_hash"] is None
     assert created_db_record["file_name"] == "doc.pdf"
     assert created_db_record["file_download_url"] is None
 
 
 @pytest.mark.unit
+async def test_upload_credential_invalid_pdf_format(monkeypatch):
+    """
+    Validates: Từ chối các file không bắt đầu bằng magic bytes %PDF-.
+    """
+    svc = FileService()
+    f = DummyUploadFile("fake.pdf", "application/pdf", b"ABC_NOT_A_PDF")
+    with pytest.raises(ValueError, match="không đúng định dạng PDF"):
+        await svc.upload_credential(db=object(), user_id=1, file=f, tenant_id=1)
+
+
+@pytest.mark.unit
 async def test_upload_credential_empty_file_edge_case(monkeypatch):
     """
     Validates: Xử lý an toàn file rỗng (0 bytes upload).
-    Đảm bảo sinh ra sha256 của chuỗi rỗng và size=0.
     """
-    created_db_record = {}
-
-    monkeypatch.setattr(
-        "app.services.file_service.credential_repo.create",
-        AsyncMock(
-            side_effect=lambda db, **kwargs: (
-                created_db_record.update(kwargs) or SimpleNamespace(**kwargs, id=1)
-            )
-        ),
-    )
-    monkeypatch.setattr("app.services.file_service.log_service.log_action", AsyncMock())
-
     svc = FileService()
     f = DummyUploadFile("empty.pdf", "application/pdf", b"")
     with pytest.raises(ValueError, match="không được rỗng"):
         await svc.upload_credential(db=object(), user_id=1, file=f, tenant_id=1)
+
+
+@pytest.mark.unit
+async def test_upload_credential_oversized_file():
+    svc = FileService()
+    oversized_pdf = b"%PDF-" + b"0" * (MAX_FILE_SIZE + 10)
+    f = DummyUploadFile("large.pdf", "application/pdf", oversized_pdf)
+
+    with pytest.raises(ValueError, match="Dung lượng tệp vượt quá giới hạn cho phép"):
+        await svc.upload_credential(db=object(), user_id=1, file=f, tenant_id=1)
+
+
+@pytest.mark.unit
+async def test_issue_and_sign_credential_oversized_file():
+    svc = FileService()
+    oversized_pdf = b"%PDF-" + b"0" * (MAX_FILE_SIZE + 10)
+    f = DummyUploadFile("large.pdf", "application/pdf", oversized_pdf)
+
+    with pytest.raises(ValueError, match="Dung lượng tệp vượt quá giới hạn cho phép"):
+        await svc.issue_and_sign_credential(
+            db=object(),
+            file=f,
+            tenant_id=1,
+            user_id=1,
+            recipient_name="Alice",
+            recipient_id="A-1",
+            sign_data=SimpleNamespace(),
+        )
