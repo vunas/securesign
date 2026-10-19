@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.services.file_service import FileService
+from app.utils.file_utils import MAX_FILE_SIZE
 
 pytestmark = pytest.mark.asyncio
 
@@ -77,3 +78,31 @@ async def test_upload_credential_empty_file_edge_case(monkeypatch):
     f = DummyUploadFile("empty.pdf", "application/pdf", b"")
     with pytest.raises(ValueError, match="không được rỗng"):
         await svc.upload_credential(db=object(), user_id=1, file=f, tenant_id=1)
+
+
+@pytest.mark.unit
+async def test_upload_credential_oversized_file():
+    svc = FileService()
+    oversized_pdf = b"%PDF-" + b"0" * (MAX_FILE_SIZE + 10)
+    f = DummyUploadFile("large.pdf", "application/pdf", oversized_pdf)
+
+    with pytest.raises(ValueError, match="Dung lượng tệp vượt quá giới hạn cho phép"):
+        await svc.upload_credential(db=object(), user_id=1, file=f, tenant_id=1)
+
+
+@pytest.mark.unit
+async def test_issue_and_sign_credential_oversized_file():
+    svc = FileService()
+    oversized_pdf = b"%PDF-" + b"0" * (MAX_FILE_SIZE + 10)
+    f = DummyUploadFile("large.pdf", "application/pdf", oversized_pdf)
+
+    with pytest.raises(ValueError, match="Dung lượng tệp vượt quá giới hạn cho phép"):
+        await svc.issue_and_sign_credential(
+            db=object(),
+            file=f,
+            tenant_id=1,
+            user_id=1,
+            recipient_name="Alice",
+            recipient_id="A-1",
+            sign_data=SimpleNamespace(),
+        )
