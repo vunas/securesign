@@ -1,6 +1,7 @@
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from app.core.config import settings
 from app.main import app
 
 
@@ -19,7 +20,9 @@ class TestMainApp:
         # Assert
         assert response.status_code == 200
         data = response.json()
-        assert "service" in data
+        assert data["service"] == settings.PROJECT_NAME
+        assert data["docs"] == "/docs"
+        assert data["health"] == "/api/health-check"
 
     async def test_health_check_route_returns_200(self, main_client):
         # Arrange / Act

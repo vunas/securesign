@@ -25,7 +25,9 @@ interface CredentialOption {
 
 export default function SignPage() {
   const router = useRouter();
-  const [currentFileMode, setCurrentFileMode] = useState<"upload" | "select">("upload");
+  const [currentFileMode, setCurrentFileMode] = useState<"upload" | "select">(
+    "upload",
+  );
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -40,7 +42,9 @@ export default function SignPage() {
     }
     return "Người dùng SecureSign";
   });
-  const [signerReason, setSignerReason] = useState("Xác nhận tính pháp lý tài liệu");
+  const [signerReason, setSignerReason] = useState(
+    "Xác nhận tính pháp lý tài liệu",
+  );
   const [signerLocation] = useState("Việt Nam");
   const [passphrase, setPassphrase] = useState("");
   const [localKeyFile, setLocalKeyFile] = useState<File | null>(null);
@@ -50,7 +54,15 @@ export default function SignPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const localKeyInputRef = useRef<HTMLInputElement>(null);
-
+  function escapeHtml(str: string | null | undefined): string {
+    if (!str) return "";
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
   useEffect(() => {
     let isMounted = true;
     const user = getCurrentUsername();
@@ -83,8 +95,15 @@ export default function SignPage() {
 
   const handleFileSelect = (file: File) => {
     if (!file) return;
-    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      showAlert("Định dạng không hỗ trợ", "Hệ thống chỉ hỗ trợ xử lý file PDF!", "error");
+    if (
+      file.type !== "application/pdf" &&
+      !file.name.toLowerCase().endsWith(".pdf")
+    ) {
+      showAlert(
+        "Định dạng không hỗ trợ",
+        "Hệ thống chỉ hỗ trợ xử lý file PDF!",
+        "error",
+      );
       return;
     }
     setSelectedFile(file);
@@ -113,7 +132,11 @@ export default function SignPage() {
     e.preventDefault();
 
     if (!selectedFile) {
-      await showAlert("Khoan đã", "Vui lòng chọn hoặc tải lên tệp PDF cần ký.", "warning");
+      await showAlert(
+        "Khoan đã",
+        "Vui lòng chọn hoặc tải lên tệp PDF cần ký.",
+        "warning",
+      );
       return;
     }
 
@@ -122,18 +145,24 @@ export default function SignPage() {
       return;
     }
 
-    let rawKeyContent: string | null = null;
-    if (selectedKey?.storage_type === "local") {
-      if (!localKeyFile) {
-        await showAlert("Lỗi", "Vui lòng tải lên file Private Key (.pem)", "error");
-        return;
-      }
-      rawKeyContent = await readFileAsText(localKeyFile);
-    }
-
     setLoading(true);
 
     try {
+      let rawKeyContent: string | null = null;
+      if (selectedKey?.storage_type === "local") {
+        if (!localKeyFile) {
+          await showAlert(
+            "Lỗi",
+            "Vui lòng tải lên file Private Key (.pem)",
+            "error",
+          );
+          setLoading(false);
+          return;
+        }
+        // Đã chuyển vào trong khối try...catch
+        rawKeyContent = await readFileAsText(localKeyFile);
+      }
+
       let credId = selectedCredId ? Number(selectedCredId) : null;
 
       // 1. Nếu là mode upload hoặc chưa có credential ID, upload credential trước
@@ -142,7 +171,12 @@ export default function SignPage() {
         const uploadForm = new FormData();
         uploadForm.append("file", selectedFile);
 
-        const credData = await fetchAPI<{ id: number }>("/api/documents/upload", "POST", uploadForm, true);
+        const credData = await fetchAPI<{ id: number }>(
+          "/api/documents/upload",
+          "POST",
+          uploadForm,
+          true,
+        );
         credId = credData.id;
       }
 
@@ -175,45 +209,31 @@ export default function SignPage() {
       }
 
       const signedHash = response.headers.get("X-Signed-Hash") || "";
-      const pdfBlob = await response.blob();
 
-      // Kích hoạt tải file PDF đã ký về máy
-      const downloadUrl = window.URL.createObjectURL(pdfBlob);
       const downloadName = selectedFile.name.replace(/\.pdf$/i, "_signed.pdf");
-      const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.download = downloadName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      const safeDownloadName = escapeHtml(downloadName);
 
-      // Hiển thị thông báo thành công
       const Swal = getSwal();
       if (Swal) {
         Swal.fire({
           icon: "success",
           title: "Ký duyệt thành công!",
           html: `<p class="text-sm text-slate-600 mb-2">Chữ ký số và con dấu trực quan đã được nhúng vào file PDF.</p>
-                 <p class="text-xs text-slate-500 font-mono bg-slate-100 p-2 rounded">SHA256: ${signedHash ? signedHash.substring(0, 32) + "..." : "Thành công"}</p>
-                 <p class="text-xs text-emerald-600 font-medium mt-2"><i class="fa-solid fa-download mr-1"></i> File <b>${downloadName}</b> đã được tải về máy của bạn.</p>`,
+               <p class="text-xs text-slate-500 font-mono bg-slate-100 p-2 rounded">SHA256: ${escapeHtml(signedHash ? signedHash.substring(0, 32) + "..." : "Thành công")}</p>
+               <p class="text-xs text-emerald-600 font-medium mt-2"><i class="fa-solid fa-download mr-1"></i> File <b>${safeDownloadName}</b> đã được tải về máy của bạn.</p>`,
           confirmButtonColor: "#4f46e5",
           confirmButtonText: "Vào Dashboard",
           showCancelButton: true,
           cancelButtonText: "Xác thực file vừa ký",
-        }).then((result) => {
-          if (result.isConfirmed) {
-            router.push("/dashboard");
-          } else {
-            router.push("/verify");
-          }
         });
-      } else {
-        alert("Ký duyệt thành công! File đã được tải về máy.");
-        router.push("/dashboard");
       }
     } catch (error: unknown) {
       const err = error as Error;
-      await showAlert("Lỗi hệ thống", err.message || "Không thể thực hiện ký số.", "error");
+      await showAlert(
+        "Lỗi hệ thống",
+        err.message || "Không thể thực hiện ký số.",
+        "error",
+      );
     } finally {
       setLoading(false);
       setLoadingText("");
@@ -226,27 +246,34 @@ export default function SignPage() {
     <div className="min-h-screen flex flex-col">
       <Navbar />
 
-      <main className="flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 overflow-hidden">
+      <main className="grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 overflow-hidden">
         <div className="max-w-6xl mx-auto">
           {/* Header Page */}
           <div className="mb-8">
             <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-              <i className="fa-solid fa-pen-nib text-blue-600 mr-3"></i>Thực Hiện Ký Số PAdES
+              <i className="fa-solid fa-pen-nib text-blue-600 mr-3"></i>Thực
+              Hiện Ký Số PAdES
             </h2>
             <p className="text-slate-500 mt-2 text-lg">
-              Hệ thống sẽ nhúng chữ ký bảo mật và dấu mộc điện tử trực tiếp vào tài liệu của bạn theo kiến trúc Stateless.
+              Hệ thống sẽ nhúng chữ ký bảo mật và dấu mộc điện tử trực tiếp vào
+              tài liệu của bạn theo kiến trúc Stateless.
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <form
+            onSubmit={handleSubmit}
+            className="grid grid-cols-1 lg:grid-cols-12 gap-8"
+          >
             {/* CỘT 1: CHỌN FILE (Chiếm 5 cột) */}
             <div className="lg:col-span-5 flex flex-col space-y-6">
-              <div className="bg-white shadow-xl shadow-slate-200/40 rounded-2xl p-6 border border-slate-100 flex-grow flex flex-col">
+              <div className="bg-white shadow-xl shadow-slate-200/40 rounded-2xl p-6 border border-slate-100 grow flex flex-col">
                 <div className="flex items-center mb-4">
                   <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold mr-3">
                     1
                   </div>
-                  <h3 className="text-xl font-bold text-slate-800">Tài liệu cần ký</h3>
+                  <h3 className="text-xl font-bold text-slate-800">
+                    Tài liệu cần ký
+                  </h3>
                 </div>
 
                 {/* TABS CHUYỂN ĐỔI CHẾ ĐỘ FILE */}
@@ -260,7 +287,8 @@ export default function SignPage() {
                         : "text-slate-500 hover:text-slate-700"
                     }`}
                   >
-                    <i className="fa-solid fa-cloud-arrow-up mr-1.5"></i>Tải lên mới
+                    <i className="fa-solid fa-cloud-arrow-up mr-1.5"></i>Tải lên
+                    mới
                   </button>
                   <button
                     type="button"
@@ -271,13 +299,14 @@ export default function SignPage() {
                         : "text-slate-500 hover:text-slate-700"
                     }`}
                   >
-                    <i className="fa-solid fa-folder-open mr-1.5"></i>Chọn từ kho
+                    <i className="fa-solid fa-folder-open mr-1.5"></i>Chọn từ
+                    kho
                   </button>
                 </div>
 
                 {/* PANEL 1: UPLOAD FILE MỚI */}
                 {currentFileMode === "upload" && (
-                  <div className="flex-grow">
+                  <div className="grow">
                     {!selectedFile ? (
                       <div
                         onDragOver={(e) => {
@@ -295,7 +324,9 @@ export default function SignPage() {
                         <p className="text-slate-700 font-semibold mb-1">
                           Nhấn hoặc kéo thả file vào đây
                         </p>
-                        <p className="text-xs text-slate-400">Chỉ hỗ trợ .pdf (Tối đa 15MB)</p>
+                        <p className="text-xs text-slate-400">
+                          Chỉ hỗ trợ .pdf (Tối đa 15MB)
+                        </p>
                         <input
                           type="file"
                           ref={fileInputRef}
@@ -324,15 +355,20 @@ export default function SignPage() {
                             <div className="w-14 h-14 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center text-2xl mb-3 shadow-inner">
                               <i className="fa-solid fa-file-pdf"></i>
                             </div>
-                            <p className="font-bold text-slate-800 w-full truncate px-4" title={selectedFile.name}>
+                            <p
+                              className="font-bold text-slate-800 w-full truncate px-4"
+                              title={selectedFile.name}
+                            >
                               {selectedFile.name}
                             </p>
                             <div className="flex items-center justify-center mt-2 space-x-2">
                               <span className="bg-slate-100 text-slate-600 px-2.5 py-1 rounded text-xs font-medium">
-                                {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
+                                {(selectedFile.size / (1024 * 1024)).toFixed(2)}{" "}
+                                MB
                               </span>
                               <span className="bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded text-xs font-semibold">
-                                <i className="fa-solid fa-check mr-1"></i> Sẵn sàng tải lên & ký
+                                <i className="fa-solid fa-check mr-1"></i> Sẵn
+                                sàng tải lên & ký
                               </span>
                             </div>
                           </div>
@@ -344,7 +380,7 @@ export default function SignPage() {
 
                 {/* PANEL 2: CHỌN FILE TỪ KHO */}
                 {currentFileMode === "select" && (
-                  <div className="flex-grow flex flex-col justify-center min-h-[12rem] space-y-4">
+                  <div className="grow flex flex-col justify-center min-h-48 space-y-4">
                     <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200">
                       <label className="block text-sm font-semibold text-slate-700 mb-2">
                         Chọn tài liệu từ kho (Metadata)
@@ -366,7 +402,9 @@ export default function SignPage() {
                       </select>
                       <p className="text-xs text-slate-500 mt-3 flex items-start">
                         <i className="fa-solid fa-lightbulb text-amber-500 mt-0.5 mr-1.5"></i>
-                        Theo chính sách Stateless, file PDF gốc không lưu vĩnh viễn trên máy chủ. Vui lòng đính kèm file PDF gốc bên dưới để ký.
+                        Theo chính sách Stateless, file PDF gốc không lưu vĩnh
+                        viễn trên máy chủ. Vui lòng đính kèm file PDF gốc bên
+                        dưới để ký.
                       </p>
                     </div>
 
@@ -390,16 +428,23 @@ export default function SignPage() {
 
                 <div className="mt-6 bg-blue-50/50 p-4 rounded-xl border border-blue-100/50">
                   <h4 className="text-sm font-bold text-blue-800 mb-2">
-                    <i className="fa-solid fa-stamp text-blue-500 mr-2"></i> Tính năng an toàn
+                    <i className="fa-solid fa-stamp text-blue-500 mr-2"></i>{" "}
+                    Tính năng an toàn
                   </h4>
                   <ul className="text-xs text-blue-700/80 space-y-1.5 ml-1">
                     <li className="flex items-start">
                       <i className="fa-solid fa-check-circle text-emerald-500 mt-0.5 mr-2"></i>
-                      <span>Xử lý trong bộ nhớ RAM, chống rò rỉ dữ liệu tài liệu nhạy cảm.</span>
+                      <span>
+                        Xử lý trong bộ nhớ RAM, chống rò rỉ dữ liệu tài liệu
+                        nhạy cảm.
+                      </span>
                     </li>
                     <li className="flex items-start">
                       <i className="fa-solid fa-check-circle text-emerald-500 mt-0.5 mr-2"></i>
-                      <span>Tự động đính kèm mộc chữ ký ở góc văn bản kèm dấu thời gian TSA.</span>
+                      <span>
+                        Tự động đính kèm mộc chữ ký ở góc văn bản kèm dấu thời
+                        gian TSA.
+                      </span>
                     </li>
                   </ul>
                 </div>
@@ -416,7 +461,9 @@ export default function SignPage() {
                       <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold mr-3">
                         2
                       </div>
-                      <h3 className="text-xl font-bold text-slate-800">Chọn Khóa Ký</h3>
+                      <h3 className="text-xl font-bold text-slate-800">
+                        Chọn Khóa Ký
+                      </h3>
                     </div>
                     <Link
                       href="/generate-key"
@@ -435,7 +482,8 @@ export default function SignPage() {
                     <option value="">-- Chọn Khóa Ký Của Bạn --</option>
                     {keys.map((k) => (
                       <option key={k.id} value={k.id}>
-                        {k.key_name || k.name} ({k.algorithm} - {k.storage_type === "server" ? "Server" : "Local File"})
+                        {k.key_name || k.name} ({k.algorithm} -{" "}
+                        {k.storage_type === "server" ? "Server" : "Local File"})
                       </option>
                     ))}
                   </select>
@@ -447,7 +495,9 @@ export default function SignPage() {
                     <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold mr-3">
                       3
                     </div>
-                    <h3 className="text-xl font-bold text-slate-800">Thông tin đại diện & Mộc</h3>
+                    <h3 className="text-xl font-bold text-slate-800">
+                      Thông tin đại diện & Mộc
+                    </h3>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -487,7 +537,8 @@ export default function SignPage() {
                     <div className="flex items-center mb-3">
                       <i className="fa-solid fa-lock text-indigo-600 mr-2"></i>
                       <h4 className="text-sm font-bold text-indigo-900">
-                        Xác Thực Bảo Mật Cho Khóa &quot;{selectedKey.key_name || selectedKey.name}&quot;
+                        Xác Thực Bảo Mật Cho Khóa &quot;
+                        {selectedKey.key_name || selectedKey.name}&quot;
                       </h4>
                     </div>
 
@@ -532,21 +583,24 @@ export default function SignPage() {
                   disabled={!isFormReady || loading}
                   className={`w-full py-4 px-4 rounded-xl font-bold flex items-center justify-center text-lg transition-all duration-200 cursor-pointer shadow-lg ${
                     isFormReady && !loading
-                      ? "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-blue-500/30 transform hover:-translate-y-1"
+                      ? "bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-blue-500/30 transform hover:-translate-y-1"
                       : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
                   }`}
                 >
                   {loading ? (
                     <>
-                      <i className="fa-solid fa-spinner fa-spin mr-2"></i> {loadingText}
+                      <i className="fa-solid fa-spinner fa-spin mr-2"></i>{" "}
+                      {loadingText}
                     </>
                   ) : !selectedFile ? (
                     <>
-                      <i className="fa-solid fa-file-circle-xmark mr-2"></i> Chờ Chọn PDF...
+                      <i className="fa-solid fa-file-circle-xmark mr-2"></i> Chờ
+                      Chọn PDF...
                     </>
                   ) : (
                     <>
-                      <i className="fa-solid fa-signature mr-2"></i> Thực Hiện Ký Nhúng & Tải Về
+                      <i className="fa-solid fa-signature mr-2"></i> Thực Hiện
+                      Ký Nhúng & Tải Về
                     </>
                   )}
                 </button>

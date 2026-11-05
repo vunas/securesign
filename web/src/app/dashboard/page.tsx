@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { fetchAPI, getCurrentUsername } from "@/lib/api";
-import { showAlert, showToast, getSwal } from "@/lib/swal";
+import { showToast, getSwal } from "@/lib/swal";
 
 interface KeyItem {
   id: number;
@@ -78,45 +78,6 @@ export default function DashboardPage() {
     };
   }, [router]);
 
-  const handleDownloadCredential = async (credId: number, fileName: string) => {
-    try {
-      const response = await fetch(`/api/documents/${credId}/download`, {
-        method: "GET",
-        credentials: "include",
-      });
-
-      if (response.status === 410) {
-        const errJson = await response.json().catch(() => ({}));
-        await showAlert(
-          "Chính Sách Stateless & Zero-Knowledge",
-          errJson.detail ||
-            "PDF không được lưu trữ theo chính sách Stateless & Zero-Knowledge. Hãy tải lại file để xác thực hoặc ký.",
-          "info"
-        );
-        return;
-      }
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.detail || "Không thể tải file từ máy chủ");
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-      showToast("Đã tải tài liệu thành công!", "success");
-    } catch (error: unknown) {
-      const err = error as Error;
-      await showAlert("Lỗi tải file", err.message, "error");
-    }
-  };
-
   const downloadPubKey = (key: KeyItem) => {
     const blob = new Blob([key.public_key], { type: "text/plain" });
     const url = window.URL.createObjectURL(blob);
@@ -134,7 +95,8 @@ export default function DashboardPage() {
     const Swal = getSwal();
     if (Swal) {
       Swal.fire({
-        title: '<span class="text-xl font-bold text-slate-800"><i class="fa-solid fa-key text-indigo-500 mr-2"></i>Khóa Công Khai (Public Key)</span>',
+        title:
+          '<span class="text-xl font-bold text-slate-800"><i class="fa-solid fa-key text-indigo-500 mr-2"></i>Khóa Công Khai (Public Key)</span>',
         html: `<div class="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-4">
                 <textarea readonly class="w-full h-56 p-3 text-xs font-mono bg-transparent border-0 resize-none outline-none text-slate-700 leading-relaxed">${key.public_key}</textarea>
                </div>
@@ -151,20 +113,31 @@ export default function DashboardPage() {
     }
   };
 
+  function escapeHtml(str: string | null | undefined): string {
+    if (!str) return "";
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
   const viewSignatureDetails = (sig: SignatureItem) => {
     const Swal = getSwal();
     if (Swal) {
       Swal.fire({
-        title: '<span class="text-xl font-bold text-slate-800"><i class="fa-solid fa-file-shield text-blue-500 mr-2"></i>Chi Tiết Chữ Ký Số</span>',
+        title:
+          '<span class="text-xl font-bold text-slate-800"><i class="fa-solid fa-file-shield text-blue-500 mr-2"></i>Chi Tiết Chữ Ký Số</span>',
         html: `<div class="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-4 text-left space-y-2 text-xs">
-                <div><b>Tài liệu:</b> ${sig.credential_name}</div>
-                <div><b>Người ký:</b> ${sig.signer}</div>
-                <div><b>Khóa sử dụng:</b> ${sig.key_name}</div>
-                <div><b>Thuật toán:</b> ${sig.algorithm}</div>
-                <div><b>Thời gian:</b> ${sig.signed_at}</div>
-                <div class="pt-2 border-t border-slate-200 font-mono text-[10px] break-all"><b>Giá trị chữ ký (Base64):</b><br/>${sig.signature_base64.substring(0, 80)}...</div>
-               </div>
-               <p class="text-xs text-slate-500 mt-3 text-left"><i class="fa-solid fa-shield-check text-emerald-500 mr-1"></i> Theo kiến trúc Stateless & Zero-Knowledge, bản PDF đã ký được gửi trực tiếp về máy người dùng ngay tại thời điểm ký.</p>`,
+              <div><b>Tài liệu:</b> ${escapeHtml(sig.credential_name)}</div>
+              <div><b>Người ký:</b> ${escapeHtml(sig.signer)}</div>
+              <div><b>Khóa sử dụng:</b> ${escapeHtml(sig.key_name)}</div>
+              <div><b>Thuật toán:</b> ${escapeHtml(sig.algorithm)}</div>
+              <div><b>Thời gian:</b> ${escapeHtml(sig.signed_at)}</div>
+              <div class="pt-2 border-t border-slate-200 font-mono text-[10px] break-all"><b>Giá trị chữ ký (Base64):</b><br/>${escapeHtml(sig.signature_base64.substring(0, 80))}...</div>
+             </div>
+             <p class="text-xs text-slate-500 mt-3 text-left"><i class="fa-solid fa-shield-check text-emerald-500 mr-1"></i> Theo kiến trúc Stateless & Zero-Knowledge, bản PDF đã ký được gửi trực tiếp về máy người dùng ngay tại thời điểm ký.</p>`,
         width: 600,
         confirmButtonText: "Đóng",
         confirmButtonColor: "#3b82f6",
@@ -176,20 +149,21 @@ export default function DashboardPage() {
     <div className="min-h-screen flex flex-col">
       <Navbar />
 
-      <main className="flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 overflow-hidden">
+      <main className="grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 overflow-hidden">
         <div className="max-w-7xl mx-auto space-y-8">
           {/* KHỐI 1: SUMMARY THỐNG KÊ */}
           <div>
             <div className="flex items-center mb-6">
               <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">
-                <i className="fa-solid fa-chart-pie text-blue-600 mr-3"></i>Tổng Quan Hệ Thống
+                <i className="fa-solid fa-chart-pie text-blue-600 mr-3"></i>Tổng
+                Quan Hệ Thống
               </h2>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* Thẻ 1 */}
               <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6 flex items-center transform transition duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-slate-200/50">
-                <div className="w-16 h-16 bg-gradient-to-br from-indigo-100 to-blue-100 rounded-2xl flex items-center justify-center shadow-inner">
+                <div className="w-16 h-16 bg-linear-to-br from-indigo-100 to-blue-100 rounded-2xl flex items-center justify-center shadow-inner">
                   <i className="fa-solid fa-key text-2xl text-indigo-600"></i>
                 </div>
                 <div className="ml-5">
@@ -197,14 +171,14 @@ export default function DashboardPage() {
                     Khóa & Chứng Chỉ
                   </p>
                   <p className="text-4xl font-extrabold text-slate-800">
-                    {loading ? "..." : data?.stats.total_keys ?? 0}
+                    {loading ? "..." : (data?.stats.total_keys ?? 0)}
                   </p>
                 </div>
               </div>
 
               {/* Thẻ 2 */}
               <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6 flex items-center transform transition duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-slate-200/50">
-                <div className="w-16 h-16 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-2xl flex items-center justify-center shadow-inner">
+                <div className="w-16 h-16 bg-linear-to-br from-emerald-100 to-teal-100 rounded-2xl flex items-center justify-center shadow-inner">
                   <i className="fa-solid fa-file-pdf text-2xl text-emerald-600"></i>
                 </div>
                 <div className="ml-5">
@@ -212,14 +186,14 @@ export default function DashboardPage() {
                     Tài Liệu / Credentials
                   </p>
                   <p className="text-4xl font-extrabold text-slate-800">
-                    {loading ? "..." : data?.stats.total_credentials ?? 0}
+                    {loading ? "..." : (data?.stats.total_credentials ?? 0)}
                   </p>
                 </div>
               </div>
 
               {/* Thẻ 3 */}
               <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6 flex items-center transform transition duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-slate-200/50">
-                <div className="w-16 h-16 bg-gradient-to-br from-blue-100 to-cyan-100 rounded-2xl flex items-center justify-center shadow-inner">
+                <div className="w-16 h-16 bg-linear-to-br from-blue-100 to-cyan-100 rounded-2xl flex items-center justify-center shadow-inner">
                   <i className="fa-solid fa-signature text-2xl text-blue-600"></i>
                 </div>
                 <div className="ml-5">
@@ -227,7 +201,7 @@ export default function DashboardPage() {
                     Lượt Ký Thành Công
                   </p>
                   <p className="text-4xl font-extrabold text-slate-800">
-                    {loading ? "..." : data?.stats.total_sigs ?? 0}
+                    {loading ? "..." : (data?.stats.total_sigs ?? 0)}
                   </p>
                 </div>
               </div>
@@ -273,21 +247,33 @@ export default function DashboardPage() {
                 <tbody className="bg-white divide-y divide-slate-100">
                   {loading ? (
                     <tr>
-                      <td colSpan={4} className="px-6 py-10 text-center text-slate-400 font-medium">
-                        <i className="fa-solid fa-circle-notch fa-spin text-2xl mr-2 text-indigo-500"></i> Đang tải danh sách khóa...
+                      <td
+                        colSpan={4}
+                        className="px-6 py-10 text-center text-slate-400 font-medium"
+                      >
+                        <i className="fa-solid fa-circle-notch fa-spin text-2xl mr-2 text-indigo-500"></i>{" "}
+                        Đang tải danh sách khóa...
                       </td>
                     </tr>
                   ) : !data?.keys || data.keys.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-6 py-10 text-center text-slate-400 font-medium">
+                      <td
+                        colSpan={4}
+                        className="px-6 py-10 text-center text-slate-400 font-medium"
+                      >
                         Bạn chưa khởi tạo khóa RSA nào.
                       </td>
                     </tr>
                   ) : (
                     data.keys.map((k) => (
-                      <tr key={k.id} className="hover:bg-slate-50/50 transition-colors">
+                      <tr
+                        key={k.id}
+                        className="hover:bg-slate-50/50 transition-colors"
+                      >
                         <td className="px-6 py-5 whitespace-nowrap">
-                          <div className="font-bold text-slate-800 text-sm mb-1">{k.name}</div>
+                          <div className="font-bold text-slate-800 text-sm mb-1">
+                            {k.name}
+                          </div>
                           <div className="text-xs text-slate-500 font-medium bg-slate-100 inline-block px-2 py-0.5 rounded">
                             {k.algorithm}
                           </div>
@@ -295,11 +281,13 @@ export default function DashboardPage() {
                         <td className="px-6 py-5 whitespace-nowrap">
                           {k.storage_type === "server" ? (
                             <span className="px-2.5 py-1 inline-flex text-xs leading-5 font-bold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
-                              <i className="fa-solid fa-cloud mr-1.5 mt-0.5"></i> Lưu Server
+                              <i className="fa-solid fa-cloud mr-1.5 mt-0.5"></i>{" "}
+                              Lưu Server
                             </span>
                           ) : (
                             <span className="px-2.5 py-1 inline-flex text-xs leading-5 font-bold rounded-md bg-amber-50 text-amber-700 border border-amber-100">
-                              <i className="fa-solid fa-laptop mr-1.5 mt-0.5"></i> File Local
+                              <i className="fa-solid fa-laptop mr-1.5 mt-0.5"></i>{" "}
+                              File Local
                             </span>
                           )}
                         </td>
@@ -319,7 +307,8 @@ export default function DashboardPage() {
                             className="inline-flex items-center justify-center px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-emerald-600 rounded-lg text-xs font-semibold shadow-sm transition-colors cursor-pointer"
                             title="Tải file .pem Khóa Công Khai"
                           >
-                            <i className="fa-solid fa-download mr-1.5"></i> Tải Pub
+                            <i className="fa-solid fa-download mr-1.5"></i> Tải
+                            Pub
                           </button>
                           <button
                             disabled
@@ -344,7 +333,9 @@ export default function DashboardPage() {
                 <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-lg flex items-center justify-center mr-3 shadow-inner">
                   <i className="fa-solid fa-folder-open text-lg"></i>
                 </div>
-                <h3 className="text-lg font-bold text-slate-800">Kho Tài Liệu PDF (Credentials)</h3>
+                <h3 className="text-lg font-bold text-slate-800">
+                  Kho Tài Liệu PDF (Credentials)
+                </h3>
               </div>
               <Link
                 href="/sign"
@@ -371,46 +362,64 @@ export default function DashboardPage() {
                 <tbody className="bg-white divide-y divide-slate-100">
                   {loading ? (
                     <tr>
-                      <td colSpan={3} className="px-6 py-10 text-center text-slate-400 font-medium">
-                        <i className="fa-solid fa-circle-notch fa-spin text-2xl mr-2 text-emerald-500"></i> Đang tải kho tài liệu...
+                      <td
+                        colSpan={3}
+                        className="px-6 py-10 text-center text-slate-400 font-medium"
+                      >
+                        <i className="fa-solid fa-circle-notch fa-spin text-2xl mr-2 text-emerald-500"></i>{" "}
+                        Đang tải kho tài liệu...
                       </td>
                     </tr>
                   ) : !data?.credentials || data.credentials.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="px-6 py-10 text-center text-slate-400 font-medium">
+                      <td
+                        colSpan={3}
+                        className="px-6 py-10 text-center text-slate-400 font-medium"
+                      >
                         Chưa có tài liệu nào trong hệ thống.
                       </td>
                     </tr>
                   ) : (
                     data.credentials.map((cred) => (
-                      <tr key={cred.id} className="hover:bg-slate-50/50 transition-colors group">
+                      <tr
+                        key={cred.id}
+                        className="hover:bg-slate-50/50 transition-colors group"
+                      >
                         <td className="px-6 py-5 whitespace-nowrap">
                           <div className="flex items-center">
                             <i className="fa-solid fa-file-pdf text-2xl text-red-400 mr-4 opacity-80 group-hover:opacity-100 transition-opacity"></i>
                             <div>
-                              <div className="font-bold text-slate-800 text-sm">{cred.name}</div>
-                              <div className="text-[11px] text-slate-400 font-mono mt-0.5">ID: #{cred.id}</div>
+                              <div className="font-bold text-slate-800 text-sm">
+                                {cred.name}
+                              </div>
+                              <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                                ID: #{cred.id}
+                              </div>
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-5 whitespace-nowrap text-sm font-mono text-slate-500">
-                          {cred.hash ? `${cred.hash.substring(0, 24)}...` : "N/A"}
+                          {cred.hash
+                            ? `${cred.hash.substring(0, 24)}...`
+                            : "N/A"}
                         </td>
                         <td className="px-6 py-5 whitespace-nowrap text-right">
                           <div className="flex items-center justify-end space-x-2">
                             <button
-                              onClick={() => handleDownloadCredential(cred.id, cred.name)}
-                              className="inline-flex items-center justify-center px-3 py-2 bg-white text-slate-600 hover:bg-slate-50 rounded-lg transition-all duration-200 text-xs font-semibold border border-slate-200 shadow-sm cursor-pointer"
-                              title="Tải tài liệu nháp ban đầu"
+                              disabled
+                              className="inline-flex items-center justify-center px-3 py-2 bg-slate-100 text-slate-400 rounded-lg text-xs font-semibold cursor-not-allowed border border-slate-200 opacity-70"
+                              title="File gốc không lưu trữ trên Server theo chính sách Stateless & Zero-Knowledge"
                             >
-                              <i className="fa-solid fa-download mr-1.5"></i> Bản Gốc
+                              <i className="fa-solid fa-ban mr-1.5"></i> Không
+                              Lưu Bản Gốc
                             </button>
                             <Link
                               href={`/sign?credential_id=${cred.id}`}
                               className="inline-flex items-center justify-center px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white rounded-lg transition-all duration-200 text-sm font-bold border border-blue-200 hover:border-transparent shadow-sm"
                               title="Mang tài liệu này đi ký điện tử"
                             >
-                              <i className="fa-solid fa-pen-nib mr-2"></i> Ký Lại
+                              <i className="fa-solid fa-pen-nib mr-2"></i> Ký
+                              Lại
                             </Link>
                           </div>
                         </td>
@@ -458,24 +467,36 @@ export default function DashboardPage() {
                 <tbody className="bg-white divide-y divide-slate-100">
                   {loading ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-10 text-center text-slate-400 font-medium">
-                        <i className="fa-solid fa-circle-notch fa-spin text-2xl mr-2 text-blue-500"></i> Đang tải lịch sử ký...
+                      <td
+                        colSpan={5}
+                        className="px-6 py-10 text-center text-slate-400 font-medium"
+                      >
+                        <i className="fa-solid fa-circle-notch fa-spin text-2xl mr-2 text-blue-500"></i>{" "}
+                        Đang tải lịch sử ký...
                       </td>
                     </tr>
                   ) : !data?.signatures || data.signatures.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-10 text-center text-slate-400 font-medium">
+                      <td
+                        colSpan={5}
+                        className="px-6 py-10 text-center text-slate-400 font-medium"
+                      >
                         Chưa có lịch sử ký duyệt.
                       </td>
                     </tr>
                   ) : (
                     data.signatures.map((s) => (
-                      <tr key={s.id} className="hover:bg-slate-50/50 transition-colors">
+                      <tr
+                        key={s.id}
+                        className="hover:bg-slate-50/50 transition-colors"
+                      >
                         <td className="px-6 py-4 whitespace-nowrap font-bold text-slate-700 text-sm">
-                          <i className="fa-solid fa-file-signature mr-2 text-blue-500"></i> {s.credential_name}
+                          <i className="fa-solid fa-file-signature mr-2 text-blue-500"></i>{" "}
+                          {s.credential_name}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-600">
-                          <i className="fa-solid fa-key text-xs mr-2 text-slate-400"></i> {s.key_name}
+                          <i className="fa-solid fa-key text-xs mr-2 text-slate-400"></i>{" "}
+                          {s.key_name}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-800">
                           {s.signer}
@@ -489,7 +510,8 @@ export default function DashboardPage() {
                             className="inline-flex items-center justify-center px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white rounded-lg transition-all duration-200 text-xs font-bold border border-emerald-200 hover:border-transparent shadow-sm cursor-pointer"
                             title="Xem chi tiết chữ ký"
                           >
-                            <i className="fa-solid fa-file-shield mr-1.5"></i> Chi Tiết Chữ Ký
+                            <i className="fa-solid fa-file-shield mr-1.5"></i>{" "}
+                            Chi Tiết Chữ Ký
                           </button>
                         </td>
                       </tr>

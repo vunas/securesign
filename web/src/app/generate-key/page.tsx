@@ -12,7 +12,9 @@ export default function GenerateKeyPage() {
   const [keyName, setKeyName] = useState("");
   const [keyAlgorithm, setKeyAlgorithm] = useState("RSA_2048");
   const [storageType, setStorageType] = useState<"server" | "local">("server");
-  const [passphraseMode, setPassphraseMode] = useState<"auto" | "custom">("auto");
+  const [passphraseMode, setPassphraseMode] = useState<"auto" | "custom">(
+    "auto",
+  );
   const [passphrase, setPassphrase] = useState("");
   const [confirmPassphrase, setConfirmPassphrase] = useState("");
   const [loading, setLoading] = useState(false);
@@ -43,7 +45,11 @@ export default function GenerateKeyPage() {
     let customPass: string | null = null;
     if (storageType === "server" && passphraseMode === "custom") {
       if (passphrase !== confirmPassphrase) {
-        await showAlert("Lỗi", "Mật khẩu xác nhận không trùng khớp!", "warning");
+        await showAlert(
+          "Lỗi",
+          "Mật khẩu xác nhận không trùng khớp!",
+          "warning",
+        );
         return;
       }
       customPass = passphrase;
@@ -81,7 +87,8 @@ export default function GenerateKeyPage() {
         subject: username,
         valid_days: 365,
         passphrase: customPass,
-        raw_private_key: storageType === "local" ? keyData.raw_private_key : null,
+        raw_private_key:
+          storageType === "local" ? keyData.raw_private_key : null,
         cert_type: "END_ENTITY",
       };
 
@@ -90,25 +97,32 @@ export default function GenerateKeyPage() {
       // 3. Xử lý tải Private Key nếu là local
       if (storageType === "local" && keyData.raw_private_key) {
         const safeKeyName = keyName.replace(/[^a-z0-9]/gi, "_").toLowerCase();
-        downloadTextFile(`private_key_${safeKeyName}.pem`, keyData.raw_private_key);
+        downloadTextFile(
+          `private_key_${safeKeyName}.pem`,
+          keyData.raw_private_key,
+        );
 
         await showAlert(
           "Hoàn tất!",
           "Hệ thống đã cấp chứng chỉ. File Private Key (.pem) đã được tải xuống máy bạn!",
-          "success"
+          "success",
         );
       } else {
         await showAlert(
           "Khởi tạo thành công!",
           "Khóa và Chứng chỉ đã được liên kết tự động và mã hóa an toàn trên server.",
-          "success"
+          "success",
         );
       }
 
       router.push("/sign");
     } catch (error: unknown) {
       const err = error as Error;
-      await showAlert("Lỗi", err.message || "Đã xảy ra lỗi khi tạo khóa/chứng chỉ.", "error");
+      await showAlert(
+        "Lỗi",
+        err.message || "Đã xảy ra lỗi khi tạo khóa/chứng chỉ.",
+        "error",
+      );
     } finally {
       setLoading(false);
       setLoadingText("");
@@ -119,7 +133,7 @@ export default function GenerateKeyPage() {
     <div className="min-h-screen flex flex-col">
       <Navbar />
 
-      <main className="flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 overflow-hidden">
+      <main className="grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 overflow-hidden">
         <div className="max-w-3xl mx-auto">
           <div className="bg-white shadow-xl rounded-2xl overflow-hidden border border-gray-100">
             <div className="bg-indigo-50 px-6 py-4 border-b border-indigo-100">
@@ -127,7 +141,8 @@ export default function GenerateKeyPage() {
                 <i className="fa-solid fa-key mr-2"></i> Khởi Tạo Cặp Khóa Mới
               </h3>
               <p className="text-sm text-indigo-600 mt-1">
-                Tạo khóa công khai, khóa bí mật và tự động xin cấp chứng chỉ (CSR) từ Internal CA.
+                Tạo khóa công khai, khóa bí mật và tự động xin cấp chứng chỉ
+                (CSR) từ Internal CA.
               </p>
             </div>
 
@@ -156,8 +171,12 @@ export default function GenerateKeyPage() {
                     onChange={(e) => setKeyAlgorithm(e.target.value)}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm outline-none"
                   >
-                    <option value="RSA_2048">RSA 2048-bit (Chuẩn mực, khuyên dùng)</option>
-                    <option value="RSA_4096">RSA 4096-bit (Bảo mật tối đa)</option>
+                    <option value="RSA_2048">
+                      RSA 2048-bit (Chuẩn mực, khuyên dùng)
+                    </option>
+                    <option value="RSA_4096">
+                      RSA 4096-bit (Bảo mật tối đa)
+                    </option>
                   </select>
                 </div>
               </div>
@@ -188,7 +207,8 @@ export default function GenerateKeyPage() {
                     <span className="flex flex-1">
                       <span className="flex flex-col">
                         <span className="block text-sm font-medium text-gray-900">
-                          <i className="fa-solid fa-cloud text-indigo-600 mr-1"></i> Lưu trên Server
+                          <i className="fa-solid fa-cloud text-indigo-600 mr-1"></i>{" "}
+                          Lưu trên Server
                         </span>
                         <span className="mt-1 flex items-center text-sm text-gray-500">
                           Tiện lợi. Khóa được mã hóa an toàn.
@@ -220,7 +240,8 @@ export default function GenerateKeyPage() {
                     <span className="flex flex-1">
                       <span className="flex flex-col">
                         <span className="block text-sm font-medium text-gray-900">
-                          <i className="fa-solid fa-laptop-file text-gray-600 mr-1"></i> Lưu thiết bị cá nhân (Local)
+                          <i className="fa-solid fa-laptop-file text-gray-600 mr-1"></i>{" "}
+                          Lưu thiết bị cá nhân (Local)
                         </span>
                         <span className="mt-1 flex items-center text-sm text-gray-500">
                           Bảo mật cao. Server không lưu Private Key.
@@ -269,12 +290,13 @@ export default function GenerateKeyPage() {
                     <div className="mt-4">
                       <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-lg mb-4">
                         <div className="flex">
-                          <div className="flex-shrink-0">
+                          <div className="shrink-0">
                             <i className="fa-solid fa-triangle-exclamation text-yellow-400"></i>
                           </div>
                           <div className="ml-3">
                             <p className="text-sm text-yellow-700">
-                              Nếu quên Passphrase này, bạn sẽ mất vĩnh viễn khóa. Hệ thống cũng không thể khôi phục giúp bạn!
+                              Nếu quên Passphrase này, bạn sẽ mất vĩnh viễn
+                              khóa. Hệ thống cũng không thể khôi phục giúp bạn!
                             </p>
                           </div>
                         </div>
@@ -304,7 +326,9 @@ export default function GenerateKeyPage() {
                             required
                             minLength={6}
                             value={confirmPassphrase}
-                            onChange={(e) => setConfirmPassphrase(e.target.value)}
+                            onChange={(e) =>
+                              setConfirmPassphrase(e.target.value)
+                            }
                             placeholder="Nhập lại mật khẩu"
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                           />
@@ -315,7 +339,9 @@ export default function GenerateKeyPage() {
 
                   {passphraseMode === "auto" && (
                     <p className="text-sm text-gray-500 italic mt-2">
-                      <i className="fa-solid fa-shield-halved text-green-500"></i> Hệ thống sử dụng KMS Master Key để tự động mã hóa bảo vệ khóa của bạn. Rất tiện lợi cho việc ký hàng loạt.
+                      <i className="fa-solid fa-shield-halved text-green-500"></i>{" "}
+                      Hệ thống sử dụng KMS Master Key để tự động mã hóa bảo vệ
+                      khóa của bạn. Rất tiện lợi cho việc ký hàng loạt.
                     </p>
                   )}
                 </div>
@@ -325,7 +351,7 @@ export default function GenerateKeyPage() {
               {storageType === "local" && (
                 <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
                   <div className="flex">
-                    <div className="flex-shrink-0">
+                    <div className="shrink-0">
                       <i className="fa-solid fa-download text-blue-500"></i>
                     </div>
                     <div className="ml-3">
@@ -333,7 +359,9 @@ export default function GenerateKeyPage() {
                         Tải File Private Key (.pem)
                       </h3>
                       <p className="text-sm text-blue-700 mt-1">
-                        Hệ thống sẽ tải file Private Key về máy tính của bạn ngay sau khi tạo và <b>không lưu vào CSDL</b>. Hãy cất giữ file này cẩn thận!
+                        Hệ thống sẽ tải file Private Key về máy tính của bạn
+                        ngay sau khi tạo và <b>không lưu vào CSDL</b>. Hãy cất
+                        giữ file này cẩn thận!
                       </p>
                     </div>
                   </div>
@@ -348,11 +376,13 @@ export default function GenerateKeyPage() {
               >
                 {loading ? (
                   <>
-                    <i className="fa-solid fa-spinner fa-spin mr-2"></i> {loadingText}
+                    <i className="fa-solid fa-spinner fa-spin mr-2"></i>{" "}
+                    {loadingText}
                   </>
                 ) : (
                   <>
-                    <i className="fa-solid fa-wand-magic-sparkles mr-2"></i> Bắt Đầu Khởi Tạo Khóa
+                    <i className="fa-solid fa-wand-magic-sparkles mr-2"></i> Bắt
+                    Đầu Khởi Tạo Khóa
                   </>
                 )}
               </button>
