@@ -18,10 +18,14 @@ class TestMainApp:
 
         # Assert
         assert response.status_code == 200
+        data = response.json()
+        assert "service" in data
 
-    async def test_login_page_route_returns_200(self, main_client):
+    async def test_health_check_route_returns_200(self, main_client):
         # Arrange / Act
-        response = await main_client.get("/login")
+        response = await main_client.get("/api/health-check")
 
         # Assert
         assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "healthy"

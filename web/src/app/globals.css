@@ -1,26 +1,67 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background-color: #f8fafc;
+    color: #1e293b;
+    min-height: 100vh;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Kéo thả file đẹp mắt */
+.drop-zone {
+  border: 2px dashed #6366f1;
+  transition: all 0.3s ease;
+}
+
+.drop-zone.dragover {
+  background-color: #e0e7ff;
+  border-color: #4f46e5;
+  transform: scale(1.02);
+}
+
+/* Glassmorphism cho card */
+.glass-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Loading spinner */
+.loader {
+  border-top-color: #4f46e5;
+  animation: spinner 1.5s linear infinite;
+}
+
+@keyframes spinner {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-20px); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-pulse-slow {
+  animation: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.bg-grid-pattern {
+  background-size: 40px 40px;
+  background-image:
+    linear-gradient(to right, rgba(226, 232, 240, 0.4) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(226, 232, 240, 0.4) 1px, transparent 1px);
 }
