@@ -20,7 +20,7 @@ services:
   api:
     build:
       context: ./core
-      dockerfile: docker/Dockerfile
+      dockerfile: Dockerfile
     depends_on:
       db:
         condition: service_healthy
@@ -41,6 +41,8 @@ services:
     build:
       context: ./web
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api:8000}
     depends_on:
       - api
     environment:

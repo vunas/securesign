@@ -17,12 +17,6 @@ console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
 # Lưu thêm log vào file để audit (Kiểm toán) sau này
-file_handler = logging.FileHandler("app_audit.log", encoding="utf-8")
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
-
-"""
-Cách dùng:
-from utils.logger import logger
-logger.info("User ID 1 vừa upload file PDF")
-"""
+# file_handler = logging.FileHandler("app_audit.log", encoding="utf-8")
+# file_handler.setFormatter(formatter)
+# logger.addHandler(file_handler)
