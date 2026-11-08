@@ -24,7 +24,6 @@ dependencies = [
     "bcrypt>=5.0.0",
     "pytz>=2026.6",
     "python-dotenv>=1.2.4",
-    "supabase>=2.33.0",
     "aiosqlite>=0.22.1",
     "psycopg2-binary>=2.9.13",
     "pyjwt[crypto]>=2.15.1",
@@ -76,7 +75,6 @@ asyncio_default_fixture_loop_scope = "function"
 filterwarnings = [
     "ignore:Support for class-based `config` is deprecated.*:pydantic.warnings.PydanticDeprecatedSince20",
     "ignore:.*sqlalchemy.*declarative_base.*:DeprecationWarning",
-    "ignore::DeprecationWarning:supabase.*:",
     "ignore::DeprecationWarning:httpx.*:",
 ]
 markers = [

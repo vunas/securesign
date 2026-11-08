@@ -47,7 +47,7 @@ async def download_credential(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Tải file PDF (local hoặc Supabase – tự động xử lý)"""
+    """Download a credential PDF when stored content is available."""
     credential = await credential_repo.get_by_id(db, credential_id, current_user.tenant_id)
     if not credential:
         raise HTTPException(status_code=404, detail="Không tìm thấy credential.")

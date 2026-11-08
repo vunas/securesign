@@ -16,9 +16,6 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str = "uO12M9L4hN4b6s4mXqK_3jJ_n-pXGvL9QvO2zZqE2y0="
     TSA_URL: str = "http://timestamp.digicert.com"
 
-    SUPABASE_URL: str = ""
-    SUPABASE_KEY: str = ""
-
     # Tự động đọc từ file .env nếu có, nếu không sẽ lấy giá trị mặc định ở trên
     model_config = SettingsConfigDict(
         env_file=".env",
