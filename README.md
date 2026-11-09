@@ -1,283 +1,116 @@
-<div align="center">
+# SecureSign
 
-# 🔐 SECURESIGN
+SecureSign is a multi-tenant digital credential issuance and verification system. It consists of a FastAPI backend, a Next.js web application, and PostgreSQL.
 
-### PAdES Digital Signature Platform
+## Architecture
 
-**Enterprise-grade PKI & Secure PDF Signing System**
+- `core/`: asynchronous FastAPI application, SQLAlchemy persistence, tenant/RBAC services, private PKI, signing, verification, API keys, and audit logs.
+- `web/`: Next.js App Router application for registration, tenant operations, signing, tracking, verification, and administration.
+- `docker-compose.yml`: PostgreSQL, API, and web services.
 
-<img src="./docs/img/1.png" width="85%" />
+PDF content is processed for the duration of a request and is not stored as a credential file. The database stores credential metadata and hashes.
 
-</div>
+## Implemented workflows
 
----
+- Organization registration, platform-admin approval, and active-tenant access control.
+- Tenant roles, monthly signing quota, server-generated RSA/ECDSA keys, and X.509 signing certificates.
+- PAdES PDF signing with an RFC 3161 TSA timestamp and QR-based public tracking URL.
+- In-memory issuance and batch signing; signed files are returned to the caller.
+- Public credential lookup, uploaded-PDF signature verification, and credential/key revocation.
+- Tenant API-key creation/revocation, one-time secret display, batch API authentication, and per-minute request limits.
+- Tenant audit and verification history, filtering, and audit CSV export.
 
-## 📖 About The Project
+## Requirements
 
-**SecureSign** is a production-ready digital signature platform that simulates a complete **Public Key Infrastructure (PKI)** system.
+- Python 3.12 or newer
+- Node.js 22 or newer
+- pnpm 12
+- PostgreSQL 16
 
-It enables secure document signing using industry standards such as **RSA, X.509, and PAdES**, ensuring authenticity, integrity, and non-repudiation.
+## Local development
 
-### 🔑 Core Capabilities
+Install workspace dependencies:
 
-* RSA key pair generation & secure storage
-* X.509 certificate chain (Root → Intermediate → End-user)
-* Embedded **PAdES digital signatures** inside PDF
-* RFC3161 compliant **Timestamp Authority (TSA)**
-* Cryptographic verification & tamper detection
-
----
-
-## ✨ Key Features
-
-### 🔐 Key & Certificate Management
-
-* RSA 2048 / 4096 key generation
-* Internal Certificate Authority (CA)
-* AES-encrypted private key storage
-* Export `.pem` keys for local usage
-
----
-
-### 📄 PDF Digital Signing (PAdES)
-
-* Real PDF signing (NOT just hashing)
-* ASN.1 / DER signature embedding
-* Visible signature support
-* Compatible with Adobe Acrobat & Foxit Reader
-
----
-
-### ⏱️ Timestamping (TSA)
-
-* RFC3161 compliant timestamps
-* Prevents backdating attacks
-* Enables Long-Term Validation (LTV)
-
----
-
-### 🛡️ Security & Integrity
-
-* SHA-256 hashing
-* RSA-PSS digital signatures
-* Detects any document modification
-* Immediate signature invalidation if tampered
-
----
-
-### 💻 User Interface
-
-* Responsive dashboard (Tailwind CSS)
-* Drag & drop PDF upload
-* Real-time signing feedback
-
----
-
-## 📸 Screenshots
-
-   <p align="center">
-   <img src="./docs/img/2.png" width="45%" />
-   <img src="./docs/img/3.png" width="45%" />
-   </p>
-
-   <p align="center">
-   <img src="./docs/img/4.png" width="45%" />
-   <img src="./docs/img/5.png" width="45%" />
-   </p>
-   <p align="center">
-   <img src="./docs/img/6.png" width="90%" />
-   </p>
----
-
-## 🧠 Technical Highlights
-
-* Full PKI system (not mock implementation)
-* Internal Certificate Authority (Root + Intermediate)
-* Internal Time Stamping Authority
-* X.509 & ASN.1 certificate processing
-* Secure private key lifecycle (AES encryption)
-* PAdES-B-LT compatible signature workflow
-
----
-
-## 🛠️ Tech Stack
-
-### Backend
-
-* FastAPI
-* SQLAlchemy
-* PostgreSQL
-
-### Security & Cryptography
-
-* pyHanko
-* cryptography
-* asn1crypto
-
-### Frontend
-
-* Tailwind CSS
-* Vanilla JavaScript (Fetch API)
-
----
-
-## 🧪 Testing
-
-Tests use an isolated PostgreSQL database configured via:
-
-```env
-DATABASE_URL_TEST=postgresql+asyncpg://test:test@localhost:5432/test_db
+```powershell
+pnpm install
 ```
 
-Run:
+For the easiest local demo, the backend has development-only defaults for `SECRET_KEY` and `ENCRYPTION_KEY`. Copy `core/.env.example` to `core/.env`; set `DATABASE_URL` to a reachable PostgreSQL instance:
 
-```bash
-python -m pytest
+```powershell
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+python -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
 ```
 
-### ✔ Coverage
+For production, set `APP_ENV=production` and use the generated values below instead of the demo defaults. Keep them outside source control. Changing `ENCRYPTION_KEY` makes previously encrypted private keys unreadable.
 
-* Unit Tests
-* Integration Tests
-* Security Tests
-* Cryptographic Validation
-* API Testing
+For a Compose-managed database, the default demo keys and database password work without an `.env` file. To override them, create a root `.env`:
 
----
-
-## 🚀 Getting Started
-
-### 1. Clone repository
-
-```bash
-git clone https://github.com/your-username/securesign.git
-cd securesign
+```powershell
+Copy-Item core\.env.example core\.env
+Copy-Item core\.env.example .env
 ```
 
----
+The Compose API connects to the `db` service automatically. These defaults are for local coursework/demo use only.
 
-### 2. Create virtual environment
+Start PostgreSQL, initialize the schema and seed development data, then start both applications:
 
-```bash
-python -m venv venv
-
-# Windows
-venv\Scripts\activate
-
-# macOS/Linux
-source venv/bin/activate
+```powershell
+docker compose up -d db
+pnpm seed:core
+pnpm dev
 ```
 
----
+The web application is available at `http://localhost:3000`; the API and OpenAPI documentation are at `http://localhost:8000` and `http://localhost:8000/docs`.
 
-### 3. Install dependencies
+The seed command creates demo accounts and prints their usernames/passwords to the terminal:
 
-```bash
-pip install -r requirements.txt
-```
+| Role | Username | Password |
+|---|---|---|
+| Platform Super Admin | `admin` | `123456` |
+| Tenant Admin | `giamdoc` | `123456` |
+| Tenant Operator | `nhanvien` | `123456` |
+| Tenant Operator | `demo` | `123456` |
 
----
+These credentials and seed data are for local coursework/demo use only and must never be used in production.
 
-### 4. Setup environment
+## Docker
 
-Create `.env` file:
+For a local demo, Compose starts with built-in development credentials. For production, set `APP_ENV=production`, `SECRET_KEY`, `ENCRYPTION_KEY`, and a strong `POSTGRES_PASSWORD` in the root Compose `.env`. Configure `TSA_URL` and `PUBLIC_APP_URL` for deployment. Then run:
 
-```env
-DATABASE_URL=postgresql://user:password@localhost:5432/digital_signature_db
-SECRET_KEY=your-secret-key
-ENCRYPTION_KEY=your-32-byte-aes-key
-```
-
----
-
-### 5. Seed database
-
-```bash
-python -m app.db.seed.seed_data --force
-```
-
----
-
-### 6. Run server
-
-```bash
-uvicorn app.main:app --reload
-```
-
-👉 Open: http://localhost:8000
-
----
-
-## 🐳 Docker (Recommended)
-
-```bash
+```powershell
 docker compose up --build
 ```
 
-This will start:
+For HTTPS deployments, set `COOKIE_SECURE=true` and use an HTTPS `PUBLIC_APP_URL`.
 
-* FastAPI backend
-* PostgreSQL database
+## Useful commands
 
----
+```powershell
+pnpm dev                 # Start API and web in development mode
+pnpm dev:core            # Start only FastAPI
+pnpm dev:web             # Start only Next.js
+pnpm lint:core           # Ruff checks
+pnpm test:core           # Backend tests
+pnpm lint:web            # ESLint
+pnpm build:web           # Next.js production build
+pnpm seed:core           # Create demo schema/data without deleting existing data
+pnpm seed:core:reset     # Destructively reset and recreate demo data
+```
 
-## 👥 Demo Accounts
+## API entry points
 
-| Username       | Role     | Description                   |
-| -------------- | -------- | ----------------------------- |
-| admin          | Admin    | Full system control (Root CA) |
-| demo           | User     | Ready to sign documents       |
-| user0 -> 9     | User     | Ready to sign documents       |
+- `POST /api/tenants/register`: register an organization for approval.
+- `GET /api/admin/tenants` and `POST /api/admin/tenants/{id}/review`: platform-admin tenant review.
+- `POST /api/credentials/issue`: issue and download a signed PDF.
+- `POST /api/credentials/{id}/revoke`: revoke an issued credential.
+- `GET /api/verify/credentials/{tracking_id}`: public credential status lookup.
+- `POST /api/verify/pdf`: validate an uploaded signed PDF.
+- `POST /api/batch/sign`: sign a batch with an `X-API-Key` header.
+- `GET /api/logs/audit/export`: export tenant audit records as CSV.
 
-**Password:** `123456`
+Interactive API documentation is available at `/docs`.
 
----
+## Tests
 
-## 💡 Usage Workflow
-
-1. Login
-2. Generate key pair
-3. Upload PDF
-4. Sign document
-5. Download signed file
-6. Verify signature
-
----
-
-## ✅ Trusted Validation (IMPORTANT)
-
-To display **"Trusted Signature"** in Adobe Acrobat:
-
-1. Download Root CA certificate
-2. Import into:
-
-   * Windows Trust Store
-   * macOS Keychain
-   * Adobe Trusted Certificates
-
----
-
-## 🔒 Security Notes
-
-* Private keys are encrypted using AES before storage
-* RSA keys are never stored in plaintext
-* Signatures use SHA-256 + RSA-PSS
-* Timestamping prevents replay attacks
-* Full certificate chain validation supported
-
----
-
-## 🎯 Real-World Applications
-
-* Banking & Finance
-* Healthcare
-* Government
-* Enterprise contracts
-
----
-
-<div align="center">
-
-**Built with ❤️ for Secure Digital Transactions | 2026**
-
-</div>
+The backend tests use `DATABASE_URL_TEST` when set; otherwise they use the PostgreSQL test URL configured in `core/tests/conftest.py`. Run them with `pnpm test:core`. Frontend checks use `pnpm lint:web` and `pnpm build:web`.

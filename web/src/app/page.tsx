@@ -44,7 +44,12 @@ export default function HomePage() {
     });
 
     if (confirmed) {
-      window.location.href = "/api/certificates/download-root-ca";
+      const link = document.createElement("a");
+      link.href = "/api/certificates/download-root-ca";
+      link.download = "SecureSign_Root_CA.cer";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
     }
   };
 
@@ -106,12 +111,20 @@ export default function HomePage() {
                   {username}
                 </Link>
               ) : (
-                <Link
-                  href="/login"
-                  className="inline-flex items-center justify-center px-6 py-2.5 border border-transparent text-sm font-bold rounded-xl text-white bg-slate-900 hover:bg-blue-600 shadow-md hover:shadow-blue-500/30 transition-all duration-300 transform hover:-translate-y-0.5"
-                >
-                  Đăng nhập <i className="fa-solid fa-arrow-right ml-2"></i>
-                </Link>
+                <>
+                  <Link
+                    href="/register"
+                    className="hidden text-sm font-semibold text-slate-700 hover:text-indigo-700 sm:inline"
+                  >
+                    Đăng ký tổ chức
+                  </Link>
+                  <Link
+                    href="/login"
+                    className="inline-flex items-center justify-center px-6 py-2.5 border border-transparent text-sm font-bold rounded-xl text-white bg-slate-900 hover:bg-blue-600 shadow-md hover:shadow-blue-500/30 transition-all duration-300 transform hover:-translate-y-0.5"
+                  >
+                    Đăng nhập <i className="fa-solid fa-arrow-right ml-2"></i>
+                  </Link>
+                </>
               )}
             </div>
           </div>

@@ -7,8 +7,8 @@ import { showAlert } from "@/lib/swal";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("demo");
-  const [password, setPassword] = useState("123456");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -32,8 +32,12 @@ export default function LoginPage() {
       if (res.ok) {
         if (typeof window !== "undefined") {
           localStorage.setItem("username", data.username || username);
+          localStorage.setItem("role", data.role || "");
+          window.dispatchEvent(new Event("securesign:auth-changed"));
         }
-        router.push("/dashboard");
+        router.push(
+          data.role === "PLATFORM_SUPER_ADMIN" ? "/admin/tenants" : "/dashboard",
+        );
       } else {
         throw new Error(data.detail || "Sai thông tin đăng nhập");
       }
@@ -78,7 +82,7 @@ export default function LoginPage() {
                 onChange={(e) => setUsername(e.target.value)}
                 required
                 className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition"
-                placeholder="Nhập username (VD: admin)"
+                placeholder="Nhập tên đăng nhập"
               />
             </div>
           </div>
@@ -114,11 +118,13 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="text-xs text-gray-400 text-center mt-6">
-          © 2026 SecureSign • Demo
+        <p className="mt-6 text-center text-sm text-slate-600">
+          Chưa có tài khoản tổ chức?{" "}
+          <Link href="/register" className="font-semibold text-indigo-700 hover:underline">
+            Đăng ký tổ chức
+          </Link>
         </p>
       </div>
     </div>
   );
 }
-

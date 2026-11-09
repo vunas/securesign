@@ -1,13 +1,13 @@
-import hashlib
-import json
+from datetime import UTC, datetime
 
-from fastapi.encoders import jsonable_encoder
-from sqlalchemy import desc, select
+from sqlalchemy import desc, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
+from app.core.request_context import request_ip, request_user_agent
 from app.models.audit_log import AuditLog
 from app.models.enums import ActionStatus, LogLevel, TargetResourceType
-from app.utils.logger import logger
+from app.services.audit_integrity import create_audit_hash, verify_audit_hash
 
 
 class LogService:
@@ -21,44 +21,80 @@ class LogService:
         tenant_id: int | None = None,
         level: LogLevel = LogLevel.INFO,
         status: ActionStatus = ActionStatus.SUCCESS,
-        payload: dict = None,
-        ip_address: str = None,
-        user_agent: str = None,
-    ):
-        try:
-            result = await db.execute(select(AuditLog).order_by(desc(AuditLog.id)).limit(1))
-            last_log_record = result.scalars().first()
-            previous_hash = (
-                last_log_record.log_hash
-                if last_log_record and last_log_record.log_hash
-                else "GENESIS_HASH"
-            )
+        payload: dict | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> AuditLog:
+        ip_address = ip_address or request_ip.get()
+        user_agent = user_agent or request_user_agent.get()
+        get_bind = getattr(db, "get_bind", None)
+        if get_bind and get_bind().dialect.name == "postgresql":
+            await db.execute(text("SELECT pg_advisory_xact_lock(602819734)"))
+        result = await db.execute(select(AuditLog).order_by(desc(AuditLog.id)).limit(1))
+        last_log_record = result.scalars().first()
+        previous_hash = (
+            last_log_record.log_hash
+            if last_log_record and last_log_record.log_hash
+            else "GENESIS_HASH"
+        )
 
-            safe_payload = json.dumps(jsonable_encoder(payload or {}), sort_keys=True)
-            data_to_hash = f"{previous_hash}|{tenant_id}|{user_id}|{action}|{target_type}|{target_id}|{status}|{safe_payload}"
-            current_hash = hashlib.sha256(data_to_hash.encode("utf-8")).hexdigest()
+        created_at = datetime.now(UTC)
+        hash_data = {
+            "previous_hash": previous_hash,
+            "tenant_id": tenant_id,
+            "user_id": user_id,
+            "action": action,
+            "target_type": target_type,
+            "target_id": str(target_id) if target_id else None,
+            "level": level,
+            "status": status,
+            "ip_address": ip_address,
+            "user_agent": user_agent,
+            "payload": payload,
+            "created_at": created_at,
+        }
+        current_hash = create_audit_hash(settings.SECRET_KEY, **hash_data)
 
-            new_log = AuditLog(
-                tenant_id=tenant_id,
-                user_id=user_id,
-                action=action,
-                target_type=target_type,
-                target_id=str(target_id) if target_id else None,
-                level=level,
-                status=status,
-                ip_address=ip_address,
-                user_agent=user_agent,
-                payload=payload,
-                log_hash=current_hash,
-            )
+        new_log = AuditLog(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action=action,
+            target_type=target_type,
+            target_id=str(target_id) if target_id else None,
+            level=level,
+            status=status,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            payload=payload,
+            log_hash=current_hash,
+            created_at=created_at,
+        )
+        db.add(new_log)
+        await db.flush()
+        return new_log
 
-            db.add(new_log)
-            await db.flush()
-            return new_log
-
-        except Exception as e:
-            logger.error(f"Lỗi ghi Audit Log: {str(e)}")
-            pass
+    async def verify_chain(self, db: AsyncSession) -> dict:
+        result = await db.execute(select(AuditLog).order_by(AuditLog.id))
+        entries = result.scalars().all()
+        previous_hash = "GENESIS_HASH"
+        legacy_count = 0
+        for index, entry in enumerate(entries, start=1):
+            if not (entry.log_hash or "").startswith("hmac-sha256:"):
+                legacy_count += 1
+            if not verify_audit_hash(settings.SECRET_KEY, entry, previous_hash):
+                return {
+                    "valid": False,
+                    "checked_entries": index,
+                    "legacy_entries": legacy_count,
+                    "invalid_entry_id": entry.id,
+                }
+            previous_hash = entry.log_hash
+        return {
+            "valid": True,
+            "checked_entries": len(entries),
+            "legacy_entries": legacy_count,
+            "invalid_entry_id": None,
+        }
 
 
 log_service = LogService()

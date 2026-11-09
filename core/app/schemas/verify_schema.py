@@ -21,3 +21,7 @@ class VerifyResponse(BaseModel):
     message: str
     signer_info: Optional[SignerInfoSchema] = None
     credential_hash: Optional[str] = None
+    tracking_id: Optional[str] = None
+    credential_status: Optional[str] = None
+    organization_name: Optional[str] = None
+    revocation_reason: Optional[str] = None

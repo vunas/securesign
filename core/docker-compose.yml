@@ -1,12 +1,10 @@
-version: "3.9"
-
 services:
   db:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-digital_signature_db}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-securesign-demo-db-password}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -20,21 +18,23 @@ services:
   api:
     build:
       context: .
-      dockerfile: docker/Dockerfile
+      dockerfile: Dockerfile
     depends_on:
       db:
         condition: service_healthy
     environment:
-      SECRET_KEY: ${SECRET_KEY:-change-me-in-prod}
+      APP_ENV: ${APP_ENV:-development}
+      SECRET_KEY: ${SECRET_KEY:-securesign-demo-only-secret-key-change-before-production}
       ALGORITHM: ${ALGORITHM:-HS256}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-uO12M9L4hN4b6s4mXqK_3jJ_n-pXGvL9QvO2zZqE2y0=}
       TSA_URL: ${TSA_URL:-http://timestamp.digicert.com}
-      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-digital_signature_db}}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:3000}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      DEFAULT_MONTHLY_SIGNING_LIMIT: ${DEFAULT_MONTHLY_SIGNING_LIMIT:-1000}
+      MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-20971520}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-securesign-demo-db-password}@db:5432/${POSTGRES_DB:-digital_signature_db}
     ports:
       - "${APP_PORT:-8000}:8000"
-    volumes:
-      - api_storage:/app/storage
 
 volumes:
   postgres_data:
-  api_storage:

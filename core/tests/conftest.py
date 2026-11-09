@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 from __future__ import annotations
 
 import os
@@ -8,6 +9,11 @@ from unittest.mock import AsyncMock
 import pytest
 import pytest_asyncio
 from dotenv import load_dotenv
+
+load_dotenv()
+os.environ.setdefault("SECRET_KEY", "test-only-secret-key-not-for-production-use")
+os.environ.setdefault("ENCRYPTION_KEY", "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=")
+
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event
@@ -18,11 +24,9 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.core.dependencies import get_current_user, get_db
+from app.core.dependencies import get_active_tenant_user, get_current_user, get_db
 from app.db.base import Base
 from app.models.enums import CredentialStatus, UserRole
-
-load_dotenv()
 
 
 @pytest_asyncio.fixture()
@@ -77,13 +81,14 @@ def override_get_db(db_session: AsyncSession):
 
 @pytest.fixture()
 def fastapi_app_full(override_get_db) -> FastAPI:
-    from app.routers import auth_router, key_router, signature_router, verify_router
+    from app.routers import auth_router, key_router, log_router, signature_router, verify_router
 
     app = FastAPI()
     app.include_router(auth_router.router)
     app.include_router(signature_router.router)
     app.include_router(verify_router.router)
     app.include_router(key_router.router)
+    app.include_router(log_router.router)
     app.dependency_overrides[get_db] = override_get_db
     return app
 
@@ -112,6 +117,7 @@ def override_current_user_full(fastapi_app_full: FastAPI):
         return user
 
     fastapi_app_full.dependency_overrides[get_current_user] = _override
+    fastapi_app_full.dependency_overrides[get_active_tenant_user] = _override
     return user
 
 
@@ -152,7 +158,10 @@ def mock_sign_repos(monkeypatch):
                 status=CredentialStatus.DRAFT,
             )
             self.key = SimpleNamespace(
-                id=1, storage_type="server", private_key_encrypted=b"ENCRYPTED"
+                id=1,
+                storage_type="server",
+                private_key_encrypted=b"ENCRYPTED",
+                is_revoked=False,
             )
             self.cert = SimpleNamespace(
                 id=1,

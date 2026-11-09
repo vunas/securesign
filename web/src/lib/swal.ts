@@ -5,7 +5,7 @@ type ToastIcon = 'success' | 'error' | 'warning' | 'info' | 'question';
 interface SwalOptions {
   title?: string;
   text?: string;
-  html?: string;
+  html?: string | HTMLElement;
   icon?: ToastIcon;
   showCancelButton?: boolean;
   confirmButtonColor?: string;
@@ -49,6 +49,47 @@ export async function showAlert(title: string, text: string = '', icon: ToastIco
   return { isConfirmed: true };
 }
 
+export async function showAlertWithLinks(
+  title: string,
+  text: string,
+  links: { text: string; href: string; download?: string }[],
+  icon: ToastIcon = 'info',
+) {
+  const Swal = getSwal();
+  if (Swal) {
+    const content = document.createElement('div');
+    const message = document.createElement('p');
+    message.textContent = text;
+    content.append(message);
+    for (const item of links) {
+      const link = document.createElement('a');
+      link.href = item.href;
+      link.textContent = item.text;
+      link.className = 'mt-3 inline-block text-blue-700 underline';
+      if (item.download) {
+        link.download = item.download;
+      } else {
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+      }
+      content.append(document.createElement('br'), link);
+    }
+    return Swal.fire({
+      icon,
+      title,
+      html: content,
+      confirmButtonColor: '#4f46e5',
+      customClass: {
+        confirmButton: 'rounded-xl shadow-lg font-bold px-6 py-2.5',
+      },
+    });
+  }
+  alert(
+    `${title}\n${text}\n${links.map((link) => `${link.text}: ${link.href}`).join('\n')}`,
+  );
+  return { isConfirmed: true };
+}
+
 export function showToast(message: string, icon: ToastIcon = 'success') {
   const Swal = getSwal();
   if (Swal) {
@@ -80,4 +121,3 @@ export async function showConfirm(options: SwalOptions): Promise<boolean> {
   }
   return window.confirm(options.title || 'Bạn có chắc chắn muốn thực hiện?');
 }
-
