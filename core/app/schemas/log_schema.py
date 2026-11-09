@@ -8,6 +8,7 @@ from app.models.enums import ActionStatus, LogLevel, TargetResourceType
 
 class AuditLogResponse(BaseModel):
     id: int
+    tenant_id: Optional[int]
     user_id: Optional[int]
     action: str
     target_type: Optional[TargetResourceType]

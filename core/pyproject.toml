@@ -11,11 +11,10 @@ dependencies = [
     "cryptography>=50.0.2",
     "pyhanko>=0.38.0",
     "pyhanko-certvalidator",
+    "qrcode>=8.2",
     "asn1crypto",
     "sqlalchemy[asyncio]>=2.1.6",
     "asyncpg",
-    "aiofiles",
-    "requests",
     "httpx",
     "jinja2>=3.1.6",
     "pydantic-settings>=2.16.2",
@@ -57,8 +56,6 @@ module = [
     "pyhanko_certvalidator.*",
     "asn1crypto.*",
     "pytz.*",
-    "aiofiles.*",
-    "requests.*",
 ]
 ignore_missing_imports = true
 

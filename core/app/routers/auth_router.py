@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_db
-from app.schemas.user_schema import UserCreate, UserResponse
+from app.core.config import settings
+from app.core.dependencies import DatabaseDep
 from app.services.auth_service import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     REFRESH_TOKEN_EXPIRE_DAYS,
@@ -13,21 +12,11 @@ from app.services.auth_service import (
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-@router.post("/register", response_model=UserResponse)
-async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
-    """Đăng ký tài khoản mới"""
-    try:
-        user = await auth_service.register_user(db, user_in=user_in)
-        return user
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
 @router.post("/login")
 async def login(
     response: Response,
+    db: DatabaseDep,
     form_data: OAuth2PasswordRequestForm = Depends(),
-    db: AsyncSession = Depends(get_db),
 ):
     """Đăng nhập và Set HttpOnly Cookie"""
     try:
@@ -45,7 +34,7 @@ async def login(
         key="access_token",
         value=f"Bearer {access_token}",
         httponly=True,
-        secure=False,
+        secure=settings.COOKIE_SECURE,
         samesite="lax",
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
@@ -53,16 +42,20 @@ async def login(
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        secure=False,
+        secure=settings.COOKIE_SECURE,
         samesite="lax",
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
     )
 
-    return {"message": "Đăng nhập thành công", "username": user.username}
+    return {
+        "message": "Đăng nhập thành công",
+        "username": user.username,
+        "role": user.role.value,
+    }
 
 
 @router.post("/refresh")
-async def refresh_token(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+async def refresh_token(request: Request, response: Response, db: DatabaseDep):
     """Cấp lại Access Token mới dựa vào Refresh Cookie"""
     refresh_cookie = request.cookies.get("refresh_token")
 
@@ -80,7 +73,7 @@ async def refresh_token(request: Request, response: Response, db: AsyncSession =
         key="access_token",
         value=f"Bearer {new_access_token}",
         httponly=True,
-        secure=False,
+        secure=settings.COOKIE_SECURE,
         samesite="lax",
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )

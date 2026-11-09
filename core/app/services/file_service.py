@@ -5,10 +5,12 @@ from datetime import date
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.enums import CredentialStatus, TargetResourceType
 from app.repositories.credential_repo import credential_repo
 from app.schemas.signature_schema import SignatureCreate
 from app.services.log_service import log_service
+from app.services.quota_service import quota_service
 from app.services.sign_service import sign_service
 from app.utils.file_utils import MAX_FILE_SIZE
 
@@ -72,12 +74,12 @@ class FileService:
         credential_number: str | None = None,
         issue_date: date | None = None,
         metadata_payload: dict | None = None,
-    ) -> tuple[bytes, str]:
-        """Tiếp nhận PDF và recipient metadata, rồi ký trực tiếp trên RAM."""
+    ) -> tuple[bytes, str, str]:
+        """Create a credential record and sign the PDF in memory."""
         if tenant_id is None:
             raise ValueError("Tenant ID là bắt buộc.")
 
-        # 1. Đọc nội dung file vào RAM có giới hạn
+        # File bytes are retained only for this request and never written to disk.
         pdf_bytes = await file.read(MAX_FILE_SIZE + 1)
         if len(pdf_bytes) > MAX_FILE_SIZE:
             raise ValueError("Dung lượng tệp vượt quá giới hạn cho phép (tối đa 20MB).")
@@ -89,7 +91,7 @@ class FileService:
         original_hash = hashlib.sha256(pdf_bytes).hexdigest()
         tracking_id = uuid.uuid4().hex
 
-        # 2. Tạo bản ghi Credential ban đầu với thông tin thực tế từ người dùng
+        await quota_service.reserve_signing(db, tenant_id)
         credential = await credential_repo.create(
             db=db,
             tenant_id=tenant_id,
@@ -101,16 +103,19 @@ class FileService:
             issue_date=issue_date or date.today(),
             metadata_=metadata_payload,
             file_name=file.filename,
-            file_download_url=None,  # Chuẩn Stateless: Không lưu path đĩa
+            file_download_url=None,
             original_hash=original_hash,
             signed_hash=None,
             status=CredentialStatus.DRAFT,
         )
 
-        # Gán credential_id vào sign_data để liên kết bản ghi chữ ký
-        sign_data.credential_id = credential.id
+        sign_data = sign_data.model_copy(
+            update={
+                "credential_id": credential.id,
+                "verification_url": f"{settings.PUBLIC_APP_URL.rstrip('/')}/verify/{tracking_id}",
+            }
+        )
 
-        # 3. Ký số PAdES trực tiếp trên RAM qua sign_service
         signed_pdf_bytes, signed_hash = await sign_service.sign_pdf(
             db=db,
             pdf_bytes=pdf_bytes,
@@ -119,7 +124,6 @@ class FileService:
             user_id=user_id,
         )
 
-        # 4. Ghi Audit Log hoàn tất cấp phát
         await log_service.log_action(
             db=db,
             tenant_id=tenant_id,
@@ -136,7 +140,7 @@ class FileService:
             },
         )
 
-        return signed_pdf_bytes, signed_hash
+        return signed_pdf_bytes, signed_hash, tracking_id
 
 
 file_service = FileService()

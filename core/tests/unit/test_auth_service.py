@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from app.models.enums import UserRole
 from app.services.auth_service import AuthService
 
 pytestmark = pytest.mark.asyncio
@@ -53,7 +54,12 @@ class TestAuthService:
     ):
         # Arrange
         user = SimpleNamespace(
-            id=1, username="alice", password_hash="hashed", is_active=True, tenant_id=None
+            id=1,
+            username="alice",
+            password_hash="hashed",
+            is_active=True,
+            tenant_id=None,
+            role=UserRole.PLATFORM_SUPER_ADMIN,
         )
         monkeypatch.setattr(
             "app.services.auth_service.user_repo.get_by_username",

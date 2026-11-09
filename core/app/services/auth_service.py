@@ -10,7 +10,8 @@ from app.core.security import (
 )
 
 # Centralized Enums
-from app.models.enums import TargetResourceType
+from app.models.enums import TargetResourceType, TenantStatus, UserRole
+from app.models.tenant import Tenant
 from app.repositories.user_repo import user_repo
 from app.schemas.user_schema import UserCreate
 from app.services.log_service import log_service
@@ -48,6 +49,10 @@ class AuthService:
 
         if not user.is_active:
             raise ValueError("Tài khoản của bạn đã bị khóa.")
+        if user.role != UserRole.PLATFORM_SUPER_ADMIN:
+            tenant = await db.get(Tenant, user.tenant_id)
+            if tenant is None or tenant.status != TenantStatus.ACTIVE:
+                raise ValueError("Tổ chức chưa được phê duyệt hoặc hiện không hoạt động.")
 
         access_token = create_access_token(
             data={"sub": user.username},
@@ -83,6 +88,10 @@ class AuthService:
         user = await user_repo.get_by_username(db, username=username)
         if not user or not user.is_active:
             raise ValueError("Tài khoản bị khóa hoặc không tồn tại")
+        if user.role != UserRole.PLATFORM_SUPER_ADMIN:
+            tenant = await db.get(Tenant, user.tenant_id)
+            if tenant is None or tenant.status != TenantStatus.ACTIVE:
+                raise ValueError("Tổ chức chưa được phê duyệt hoặc hiện không hoạt động.")
 
         new_access_token = create_access_token(
             data={"sub": user.username},

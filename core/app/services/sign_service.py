@@ -1,22 +1,23 @@
 import asyncio
 import hashlib
 import io
-import logging
-import os
 from datetime import datetime
 
-import httpx
 from asn1crypto import keys, pem, x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.sign import signers
-from pyhanko.sign.fields import SigSeedSubFilter
+from pyhanko.sign.fields import SigFieldSpec, SigSeedSubFilter
 from pyhanko.sign.timestamps import HTTPTimeStamper
+from pyhanko.stamp import QRStampStyle
 from pyhanko_certvalidator.registry import SimpleCertificateStore
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.enums import CredentialStatus, TargetResourceType
+from app.core.config import settings
+from app.models.certificate import Certificate
+from app.models.enums import CertType, CredentialStatus, TargetResourceType
 from app.repositories.certificate_repo import certificate_repo
 from app.repositories.credential_repo import credential_repo
 from app.repositories.key_repo import key_repo
@@ -116,6 +117,8 @@ class SignService:
                 "Không tìm thấy tài liệu/credential, khóa hoặc chứng thư số tương ứng của tenant."
             )
 
+        if key_record.is_revoked:
+            raise ValueError("Khóa ký đã bị thu hồi.")
         if not cert_record.is_valid_now():
             raise ValueError("Chứng chỉ không hợp lệ hoặc đã hết hạn.")
 
@@ -157,9 +160,10 @@ class SignService:
 
     async def _build_certificate_registry(self, db: AsyncSession):
         cert_registry = SimpleCertificateStore()
-        inter_cert_record = await certificate_repo.get_by_name(db, "SecureSign Intermediate CA")
-
-        if inter_cert_record:
+        result = await db.execute(
+            select(Certificate).where(Certificate.cert_type == CertType.INTERMEDIATE)
+        )
+        for inter_cert_record in result.scalars().all():
             inter_cert_bytes = getattr(inter_cert_record, "certificate_data", None) or getattr(
                 inter_cert_record, "certificate_pem", None
             )
@@ -175,16 +179,10 @@ class SignService:
         return cert_registry
 
     async def _setup_timestamper(self):
-        tsa_url = os.getenv("TSA_URL")
+        tsa_url = settings.TSA_URL
         if not tsa_url:
-            return None
-        try:
-            async with httpx.AsyncClient(timeout=2) as client:
-                await client.get(tsa_url)
-            return HTTPTimeStamper(tsa_url)
-        except (httpx.TimeoutException, httpx.RequestError, ValueError) as e:
-            logging.warning(f"External TSA không phản hồi: {e}")
-            return None
+            raise ValueError("TSA_URL phải được cấu hình để phát hành văn bằng.")
+        return HTTPTimeStamper(tsa_url)
 
     def _execute_pdf_signing(
         self,
@@ -212,31 +210,30 @@ class SignService:
             embed_validation_info=False,
         )
 
-        try:
-            signers.sign_pdf(
-                pdf_writer,
-                metadata,
-                signer=signer,
-                timestamper=timestamper,
-                existing_fields_only=False,
-                in_place=False,
-                output=output_buffer,
-            )
-        except Exception:
-            if not timestamper:
-                raise
-            # Fallback nếu TSA lỗi
-            input_buffer.seek(0)
-            output_buffer = io.BytesIO()
-            signers.sign_pdf(
-                IncrementalPdfFileWriter(input_buffer, strict=False),
-                metadata,
-                signer=signer,
-                timestamper=None,
-                existing_fields_only=False,
-                in_place=False,
-                output=output_buffer,
-            )
+        stamp_style = (
+            QRStampStyle(stamp_text="Thẩm tra văn bằng\n%(url)s")
+            if sign_data.verification_url
+            else None
+        )
+        pdf_signer = signers.PdfSigner(
+            metadata,
+            signer,
+            timestamper=timestamper,
+            stamp_style=stamp_style,
+            new_field_spec=SigFieldSpec(
+                sig_field_name=metadata.field_name,
+                on_page=-1,
+                box=(36, 36, 270, 120),
+            ),
+        )
+        appearance_text_params = (
+            {"url": sign_data.verification_url} if sign_data.verification_url else None
+        )
+        pdf_signer.sign_pdf(
+            pdf_writer,
+            output=output_buffer,
+            appearance_text_params=appearance_text_params,
+        )
 
         signed_content = output_buffer.getvalue()
         return signed_content, hashlib.sha256(signed_content).hexdigest()
