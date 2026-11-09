@@ -2,11 +2,24 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from app.core.dependencies import DatabaseDep, get_optional_current_user
 from app.models.user import User
+from app.schemas.public_credential_schema import PublicCredentialStatus
 from app.schemas.verify_schema import VerifyResponse
+from app.services.credential_service import credential_service
 from app.services.verify_service import verify_service
 from app.utils.logger import logger
 
 router = APIRouter(prefix="/api/verify", tags=["Verification"])
+
+
+@router.get(
+    "/credentials/{tracking_id}",
+    response_model=PublicCredentialStatus,
+)
+async def get_public_credential_status(tracking_id: str, db: DatabaseDep):
+    credential = await credential_service.get_public_status(db, tracking_id)
+    if credential is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy văn bằng.")
+    return credential
 
 
 @router.post("/pdf", response_model=VerifyResponse)
@@ -18,7 +31,9 @@ async def verify_uploaded_pdf(
     """
     Xác thực một file PDF xem đã được ký chưa, có bị chỉnh sửa không.
     """
-    if file.content_type != "application/pdf":
+    if file.content_type != "application/pdf" and not (file.filename or "").lower().endswith(
+        ".pdf"
+    ):
         raise HTTPException(status_code=400, detail="Vui lòng tải lên file định dạng PDF.")
 
     try:

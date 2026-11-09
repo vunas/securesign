@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.request_context import request_ip, request_user_agent
 from app.models.verify_log import VerifyLog
 
 
@@ -31,6 +32,8 @@ class VerifyLogService:
             is_not_revoked=is_not_revoked,
             message=message,
             signer_snapshot=signer_snapshot,
+            ip_address=request_ip.get(),
+            user_agent=request_user_agent.get(),
         )
 
         db.add(verify_log)

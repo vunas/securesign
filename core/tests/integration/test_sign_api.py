@@ -1,3 +1,6 @@
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 import pytest
 
 pytestmark = pytest.mark.asyncio
@@ -15,6 +18,10 @@ async def test_sign_endpoint_returns_signature_response_shape(
         return b"%PDF-signed", "signed-hash"
 
     monkeypatch.setattr("app.routers.signature_router.sign_service.sign_pdf", fake_sign_pdf)
+    monkeypatch.setattr(
+        "app.routers.signature_router.credential_repo.get_by_id",
+        AsyncMock(return_value=SimpleNamespace(tracking_id="tracking-id")),
+    )
 
     res = await client_full.post(
         "/api/signatures/sign-pdf",

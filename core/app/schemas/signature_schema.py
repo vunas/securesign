@@ -13,10 +13,7 @@ class SignatureCreate(BaseModel):
     signer_reason: Optional[str] = "Xác nhận tài liệu"
     signer_location: Optional[str] = "Việt Nam"
     visible_signature: bool = True
-
-    # Bổ sung 2 trường để hỗ trợ mã hóa và giải mã Khóa
-    passphrase: Optional[str] = None
-    raw_private_key: Optional[str] = None
+    verification_url: Optional[str] = None
 
 
 class SignatureResponse(BaseModel):

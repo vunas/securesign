@@ -2,9 +2,9 @@ import hashlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-import httpx
 import pytest
 
+from app.core.config import settings
 from app.models.enums import CredentialStatus
 from app.services.sign_service import SignService
 
@@ -24,8 +24,7 @@ def sign_input():
         signer_name="Alice",
         signer_reason="Approval",
         signer_location="VN",
-        raw_private_key=None,
-        passphrase=None,
+        verification_url=None,
     )
 
 
@@ -71,68 +70,31 @@ class TestSignServiceFlow:
         with pytest.raises(ValueError, match="Không tìm thấy dữ liệu chứng chỉ"):
             sign_service._load_certificate(cert_record)
 
-    async def test_setup_timestamper_unreachable_tsa_returns_none(self, sign_service, monkeypatch):
-        # Arrange
-        monkeypatch.setattr("app.services.sign_service.os.getenv", lambda key: "http://tsa")
-
-        class FailingClient:
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *args):
-                return None
-
-            async def get(self, *args, **kwargs):
-                raise httpx.ConnectError("down")
-
-        monkeypatch.setattr(
-            "app.services.sign_service.httpx.AsyncClient",
-            lambda *args, **kwargs: FailingClient(),
-        )
-
-        # Act
-        timestamper = await sign_service._setup_timestamper()
-
-        # Assert
-        assert timestamper is None
-
-    async def test_setup_timestamper_reachable_returns_http_timestamper(
+    async def test_setup_timestamper_creates_http_timestamper_without_preflight(
         self, sign_service, monkeypatch
     ):
-        # Arrange
-        monkeypatch.setattr("app.services.sign_service.os.getenv", lambda key: "http://tsa")
-
-        class WorkingClient:
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *args):
-                return None
-
-            async def get(self, *args, **kwargs):
-                return object()
-
-        monkeypatch.setattr(
-            "app.services.sign_service.httpx.AsyncClient",
-            lambda *args, **kwargs: WorkingClient(),
-        )
+        monkeypatch.setattr(settings, "TSA_URL", "http://tsa")
         marker = object()
         monkeypatch.setattr("app.services.sign_service.HTTPTimeStamper", lambda url: marker)
 
-        # Act
-        timestamper = await sign_service._setup_timestamper()
+        assert await sign_service._setup_timestamper() is marker
 
-        # Assert
-        assert timestamper is marker
+    async def test_setup_timestamper_requires_configured_tsa(self, sign_service, monkeypatch):
+        monkeypatch.setattr(settings, "TSA_URL", "")
+        with pytest.raises(ValueError, match="TSA_URL"):
+            await sign_service._setup_timestamper()
 
     async def test_build_certificate_registry_with_intermediate_pem_registers_cert(
         self, sign_service, monkeypatch
     ):
         # Arrange
         inter = SimpleNamespace(certificate_data="PEM-TEXT")
-        monkeypatch.setattr(
-            "app.services.sign_service.certificate_repo.get_by_name",
-            AsyncMock(return_value=inter),
+        db = SimpleNamespace(
+            execute=AsyncMock(
+                return_value=SimpleNamespace(
+                    scalars=lambda: SimpleNamespace(all=lambda: [inter])
+                )
+            )
         )
         monkeypatch.setattr("app.services.sign_service.pem.detect", lambda b: True)
         monkeypatch.setattr(
@@ -152,7 +114,7 @@ class TestSignServiceFlow:
         monkeypatch.setattr("app.services.sign_service.SimpleCertificateStore", DummyStore)
 
         # Act
-        registry = await sign_service._build_certificate_registry(db=object())
+        registry = await sign_service._build_certificate_registry(db=db)
 
         # Assert
         assert registry.registered is cert_obj
