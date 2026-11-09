@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -12,9 +11,7 @@ class CertificateCreate(BaseModel):
     issuer: str
     subject: str
     valid_days: int = 365
-    cert_type: Optional[CertType] = CertType.END_ENTITY
-    passphrase: Optional[str] = None
-    raw_private_key: Optional[str] = None
+    cert_type: CertType = CertType.END_ENTITY
 
 
 class CertificateResponse(BaseModel):

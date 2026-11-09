@@ -1,10 +1,9 @@
-import hashlib
+from calendar import monthrange
 from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_password_hash
-from app.models.api_key import ApiKey
 from app.models.enums import TenantStatus, UserRole
 from app.models.tenant import Tenant
 from app.models.tenant_quota import TenantQuota
@@ -12,7 +11,7 @@ from app.models.user import User
 
 
 async def seed_users(db: AsyncSession):
-    print("👤 Đang tạo Users...")
+    print("Tạo tài khoản demo (chỉ dùng cho đồ án):")
 
     tenant = Tenant(
         tenant_code="DEMO",
@@ -30,18 +29,9 @@ async def seed_users(db: AsyncSession):
             monthly_limit=1000,
             used_count=0,
             period_start=today.replace(day=1),
-            period_end=today.replace(day=28),
+            period_end=today.replace(day=monthrange(today.year, today.month)[1]),
         )
     )
-    db.add(
-        ApiKey(
-            tenant_id=tenant.id,
-            name="Demo Integration Key",
-            key_prefix="vck_live_demo",
-            key_hash=hashlib.sha256(b"demo-api-secret").hexdigest(),
-        )
-    )
-    await db.flush()
 
     users_data = [
         {"username": "admin", "pass": "123456", "role": UserRole.PLATFORM_SUPER_ADMIN},
@@ -61,11 +51,10 @@ async def seed_users(db: AsyncSession):
             is_active=True,
         )
         db.add(user)
-        await db.commit()
-        await db.refresh(user)
+        await db.flush()
 
         created_users[user.username] = user
-        print(f"  -> Đã tạo user: {user.username}")
+        print(f"  {user.username}: {user_data['pass']}")
 
     created_users["tenant"] = tenant
     return created_users

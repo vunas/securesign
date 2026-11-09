@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
+from app.models.enums import TenantStatus, UserRole
+from app.models.tenant import Tenant
 from app.models.user import User
 
 
@@ -78,3 +80,42 @@ async def get_optional_current_user(
 
 
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
+
+
+async def get_active_tenant_user(user: CurrentUserDep, db: DatabaseDep) -> User:
+    if user.tenant_id is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant role required.")
+    tenant = await db.get(Tenant, user.tenant_id)
+    if tenant is None or tenant.status != TenantStatus.ACTIVE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tài khoản tổ chức chưa được kích hoạt.",
+        )
+    return user
+
+
+ActiveTenantUserDep = Annotated[User, Depends(get_active_tenant_user)]
+
+
+async def get_tenant_admin(user: ActiveTenantUserDep) -> User:
+    if user.role != UserRole.TENANT_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chỉ quản trị viên tổ chức được phép thực hiện thao tác này.",
+        )
+    return user
+
+
+TenantAdminDep = Annotated[User, Depends(get_tenant_admin)]
+
+
+async def get_platform_super_admin(user: CurrentUserDep) -> User:
+    if user.role != UserRole.PLATFORM_SUPER_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chỉ quản trị viên nền tảng được phép thực hiện thao tác này.",
+        )
+    return user
+
+
+PlatformAdminDep = Annotated[User, Depends(get_platform_super_admin)]
