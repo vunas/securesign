@@ -12,10 +12,11 @@ interface KeyItem {
   id: number;
   name: string;
   algorithm: string;
-  storage_type: "server" | "local";
+  storage_type: "server";
   created_at: string;
   public_key: string;
-  private_key_encrypted?: string;
+  key_fingerprint: string;
+  is_revoked: boolean;
 }
 
 interface CredentialItem {
@@ -23,6 +24,11 @@ interface CredentialItem {
   name: string;
   hash: string;
   size: number;
+  tracking_id: string;
+  credential_number: string | null;
+  recipient_name: string;
+  status: "DRAFT" | "ISSUED" | "REVOKED";
+  revocation_reason: string | null;
 }
 
 interface SignatureItem {
@@ -41,6 +47,14 @@ interface DashboardData {
     total_keys: number;
     total_credentials: number;
     total_sigs: number;
+    monthly_signing_limit: number;
+    monthly_signing_used: number;
+    period_start: string;
+    period_end: string;
+  };
+  permissions: {
+    can_manage_api_keys: boolean;
+    can_revoke_credentials: boolean;
   };
   keys: KeyItem[];
   credentials: CredentialItem[];
@@ -51,6 +65,46 @@ export default function DashboardPage() {
   const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const revokeCredential = async (credential: CredentialItem) => {
+    const password = window.prompt("Nhập mật khẩu tài khoản để xác nhận thu hồi:");
+    if (!password) return;
+    const reason = window.prompt("Nhập lý do thu hồi:");
+    if (!reason?.trim()) return;
+
+    try {
+      const response = await fetch(`/api/credentials/${credential.id}/revoke`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password, reason: reason.trim() }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        const detail = result.detail;
+        throw new Error(
+          typeof detail === "string" ? detail : detail?.message || "Không thể thu hồi văn bằng.",
+        );
+      }
+      const refreshed = await fetchAPI<DashboardData>("/dashboard-api/summary");
+      setData(refreshed);
+      showToast("Đã thu hồi văn bằng", "success");
+    } catch (error: unknown) {
+      showToast(error instanceof Error ? error.message : "Không thể thu hồi văn bằng.", "error");
+    }
+  };
+
+  const revokeKey = async (key: KeyItem) => {
+    if (!window.confirm(`Thu hồi khóa "${key.name}" và chứng thư liên kết?`)) return;
+    try {
+      await fetchAPI(`/api/keys/${key.id}/revoke`, "POST");
+      const refreshed = await fetchAPI<DashboardData>("/dashboard-api/summary");
+      setData(refreshed);
+      showToast("Khóa và chứng thư đã được thu hồi.", "success");
+    } catch (error: unknown) {
+      showToast(error instanceof Error ? error.message : "Không thể thu hồi khóa.", "error");
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -137,7 +191,7 @@ export default function DashboardPage() {
               <div><b>Thời gian:</b> ${escapeHtml(sig.signed_at)}</div>
               <div class="pt-2 border-t border-slate-200 font-mono text-[10px] break-all"><b>Giá trị chữ ký (Base64):</b><br/>${escapeHtml(sig.signature_base64.substring(0, 80))}...</div>
              </div>
-             <p class="text-xs text-slate-500 mt-3 text-left"><i class="fa-solid fa-shield-check text-emerald-500 mr-1"></i> Theo kiến trúc Stateless & Zero-Knowledge, bản PDF đã ký được gửi trực tiếp về máy người dùng ngay tại thời điểm ký.</p>`,
+             <p class="text-xs text-slate-500 mt-3 text-left"><i class="fa-solid fa-shield-check text-emerald-500 mr-1"></i>              Tệp PDF đã ký được tải trực tiếp về thiết bị của người phát hành.</p>`,
         width: 600,
         confirmButtonText: "Đóng",
         confirmButtonColor: "#3b82f6",
@@ -156,11 +210,11 @@ export default function DashboardPage() {
             <div className="flex items-center mb-6">
               <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">
                 <i className="fa-solid fa-chart-pie text-blue-600 mr-3"></i>Tổng
-                Quan Hệ Thống
+                quan tổ chức
               </h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
               {/* Thẻ 1 */}
               <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6 flex items-center transform transition duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-slate-200/50">
                 <div className="w-16 h-16 bg-linear-to-br from-indigo-100 to-blue-100 rounded-2xl flex items-center justify-center shadow-inner">
@@ -205,6 +259,21 @@ export default function DashboardPage() {
                   </p>
                 </div>
               </div>
+              <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6 flex items-center">
+                <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center">
+                  <i className="fa-solid fa-gauge-high text-2xl text-amber-600"></i>
+                </div>
+                <div className="ml-5">
+                  <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                    Hạn ngạch ký tháng này
+                  </p>
+                  <p className="text-2xl font-extrabold text-slate-800">
+                    {loading
+                      ? "..."
+                      : `${data?.stats.monthly_signing_used ?? 0} / ${data?.stats.monthly_signing_limit ?? 0}`}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -216,7 +285,7 @@ export default function DashboardPage() {
                   <i className="fa-solid fa-key text-lg"></i>
                 </div>
                 <h3 className="text-lg font-bold text-slate-800">
-                  Danh Sách Khóa (RSA Keys)
+                  Danh sách khóa ký
                 </h3>
               </div>
               <Link
@@ -225,6 +294,14 @@ export default function DashboardPage() {
               >
                 <i className="fa-solid fa-plus mr-2"></i> Khởi Tạo Khóa Mới
               </Link>
+              {data?.permissions.can_manage_api_keys && (
+                <Link
+                  href="/api-keys"
+                  className="w-full sm:w-auto flex items-center justify-center rounded-xl border border-indigo-200 bg-white px-5 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-50"
+                >
+                  Quản lý API key
+                </Link>
+              )}
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-200">
@@ -275,21 +352,17 @@ export default function DashboardPage() {
                             {k.name}
                           </div>
                           <div className="text-xs text-slate-500 font-medium bg-slate-100 inline-block px-2 py-0.5 rounded">
-                            {k.algorithm}
+                            {k.algorithm} · {k.key_fingerprint}
                           </div>
+                          {k.is_revoked && (
+                            <span className="ml-2 text-xs font-bold text-red-700">Đã thu hồi</span>
+                          )}
                         </td>
                         <td className="px-6 py-5 whitespace-nowrap">
-                          {k.storage_type === "server" ? (
-                            <span className="px-2.5 py-1 inline-flex text-xs leading-5 font-bold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
-                              <i className="fa-solid fa-cloud mr-1.5 mt-0.5"></i>{" "}
-                              Lưu Server
-                            </span>
-                          ) : (
-                            <span className="px-2.5 py-1 inline-flex text-xs leading-5 font-bold rounded-md bg-amber-50 text-amber-700 border border-amber-100">
-                              <i className="fa-solid fa-laptop mr-1.5 mt-0.5"></i>{" "}
-                              File Local
-                            </span>
-                          )}
+                          <span className="px-2.5 py-1 inline-flex text-xs leading-5 font-bold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
+                            <i className="fa-solid fa-cloud mr-1.5 mt-0.5"></i>{" "}
+                            Lưu máy chủ
+                          </span>
                         </td>
                         <td className="px-6 py-5 whitespace-nowrap text-sm font-medium text-slate-500">
                           {k.created_at}
@@ -310,13 +383,14 @@ export default function DashboardPage() {
                             <i className="fa-solid fa-download mr-1.5"></i> Tải
                             Pub
                           </button>
-                          <button
-                            disabled
-                            className="inline-flex items-center justify-center px-3 py-1.5 bg-slate-50 border border-slate-100 text-slate-400 rounded-lg text-xs font-semibold cursor-not-allowed opacity-70"
-                            title="Khóa bảo mật: Hệ thống không cho phép tải Khóa Bí Mật nhằm đảm bảo tính chống chối bỏ."
-                          >
-                            <i className="fa-solid fa-lock mr-1.5"></i> Pri Key
-                          </button>
+                          {!k.is_revoked && data?.permissions.can_revoke_credentials && (
+                            <button
+                              onClick={() => void revokeKey(k)}
+                              className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700"
+                            >
+                              Thu hồi
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))
@@ -333,15 +407,13 @@ export default function DashboardPage() {
                 <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-lg flex items-center justify-center mr-3 shadow-inner">
                   <i className="fa-solid fa-folder-open text-lg"></i>
                 </div>
-                <h3 className="text-lg font-bold text-slate-800">
-                  Kho Tài Liệu PDF (Credentials)
-                </h3>
+                <h3 className="text-lg font-bold text-slate-800">Văn bằng đã phát hành</h3>
               </div>
               <Link
                 href="/sign"
                 className="w-full sm:w-auto flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-semibold shadow-md shadow-emerald-500/30 transition-all transform hover:-translate-y-0.5 text-sm"
               >
-                <i className="fa-solid fa-upload mr-2"></i> Tải Lên & Ký Ngay
+                <i className="fa-solid fa-file-circle-plus mr-2"></i> Phát hành văn bằng
               </Link>
             </div>
             <div className="overflow-x-auto">
@@ -349,10 +421,13 @@ export default function DashboardPage() {
                 <thead className="bg-slate-50">
                   <tr>
                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      Tên Tài Liệu
+                      Văn bằng / Người nhận
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      Mã Băm Gốc (SHA256)
+                      Mã tra cứu
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
+                      Trạng thái
                     </th>
                     <th className="px-6 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">
                       Thao tác
@@ -363,7 +438,7 @@ export default function DashboardPage() {
                   {loading ? (
                     <tr>
                       <td
-                        colSpan={3}
+                        colSpan={4}
                         className="px-6 py-10 text-center text-slate-400 font-medium"
                       >
                         <i className="fa-solid fa-circle-notch fa-spin text-2xl mr-2 text-emerald-500"></i>{" "}
@@ -373,7 +448,7 @@ export default function DashboardPage() {
                   ) : !data?.credentials || data.credentials.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={3}
+                        colSpan={4}
                         className="px-6 py-10 text-center text-slate-400 font-medium"
                       >
                         Chưa có tài liệu nào trong hệ thống.
@@ -390,37 +465,39 @@ export default function DashboardPage() {
                             <i className="fa-solid fa-file-pdf text-2xl text-red-400 mr-4 opacity-80 group-hover:opacity-100 transition-opacity"></i>
                             <div>
                               <div className="font-bold text-slate-800 text-sm">
-                                {cred.name}
+                                {cred.credential_number || cred.name || "Văn bằng"}
                               </div>
                               <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                                ID: #{cred.id}
+                                {cred.recipient_name}
                               </div>
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-5 whitespace-nowrap text-sm font-mono text-slate-500">
-                          {cred.hash
-                            ? `${cred.hash.substring(0, 24)}...`
-                            : "N/A"}
+                          <Link
+                            href={`/verify/${encodeURIComponent(cred.tracking_id)}`}
+                            className="font-semibold text-blue-700 hover:underline"
+                          >
+                            {cred.tracking_id}
+                          </Link>
+                        </td>
+                        <td className="px-6 py-5 whitespace-nowrap text-sm">
+                          <span className={cred.status === "REVOKED" ? "font-bold text-red-700" : "font-bold text-emerald-700"}>
+                            {cred.status === "REVOKED" ? "Đã thu hồi" : cred.status === "ISSUED" ? "Đã phát hành" : "Bản nháp"}
+                          </span>
                         </td>
                         <td className="px-6 py-5 whitespace-nowrap text-right">
                           <div className="flex items-center justify-end space-x-2">
-                            <button
-                              disabled
-                              className="inline-flex items-center justify-center px-3 py-2 bg-slate-100 text-slate-400 rounded-lg text-xs font-semibold cursor-not-allowed border border-slate-200 opacity-70"
-                              title="File gốc không lưu trữ trên Server theo chính sách Stateless & Zero-Knowledge"
-                            >
-                              <i className="fa-solid fa-ban mr-1.5"></i> Không
-                              Lưu Bản Gốc
-                            </button>
-                            <Link
-                              href={`/sign?credential_id=${cred.id}`}
-                              className="inline-flex items-center justify-center px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white rounded-lg transition-all duration-200 text-sm font-bold border border-blue-200 hover:border-transparent shadow-sm"
-                              title="Mang tài liệu này đi ký điện tử"
-                            >
-                              <i className="fa-solid fa-pen-nib mr-2"></i> Ký
-                              Lại
-                            </Link>
+                            {cred.status === "ISSUED" &&
+                              data.permissions.can_revoke_credentials && (
+                              <button
+                                type="button"
+                                onClick={() => void revokeCredential(cred)}
+                                className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100"
+                              >
+                                Thu hồi
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { showAlert } from "@/lib/swal";
@@ -19,8 +20,42 @@ interface VerifyResult {
   signer_info?: SignerInfo;
 }
 
+function isVerifyResult(value: unknown): value is VerifyResult {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("is_valid" in value) ||
+    typeof value.is_valid !== "boolean" ||
+    !("message" in value) ||
+    typeof value.message !== "string"
+  ) {
+    return false;
+  }
+
+  if (!("signer_info" in value) || value.signer_info == null) {
+    return true;
+  }
+
+  const signerInfo = value.signer_info;
+  return (
+    typeof signerInfo === "object" &&
+    "subject" in signerInfo &&
+    typeof signerInfo.subject === "string" &&
+    "issuer" in signerInfo &&
+    typeof signerInfo.issuer === "string" &&
+    "reason" in signerInfo &&
+    typeof signerInfo.reason === "string" &&
+    "has_tsa" in signerInfo &&
+    typeof signerInfo.has_tsa === "boolean" &&
+    "is_entire_file" in signerInfo &&
+    typeof signerInfo.is_entire_file === "boolean"
+  );
+}
+
 export default function VerifyPage() {
+  const router = useRouter();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [trackingId, setTrackingId] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<VerifyResult | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -64,11 +99,26 @@ export default function VerifyPage() {
         body: formData,
       });
 
-      const data: VerifyResult = await response.json();
+      const data: unknown = await response.json().catch(() => null);
+      if (!response.ok) {
+        const detail =
+          data && typeof data === "object" && "detail" in data ? data.detail : null;
+        throw new Error(
+          typeof detail === "string" ? detail : "Máy chủ không thể xác thực tệp PDF.",
+        );
+      }
+      if (!isVerifyResult(data)) {
+        throw new Error("Máy chủ trả về kết quả xác thực không hợp lệ.");
+      }
       setResult(data);
     } catch (error: unknown) {
-      console.error(error);
-      await showAlert("Lỗi kết nối", "Không thể kết nối đến máy chủ xác thực.", "error");
+      setResult({
+        is_valid: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Không thể kết nối đến máy chủ xác thực.",
+      });
     } finally {
       setLoading(false);
     }
@@ -88,6 +138,34 @@ export default function VerifyPage() {
               Upload file PDF đã được ký để hệ thống bóc tách và kiểm tra tính toàn vẹn.
             </p>
           </div>
+
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (trackingId.trim()) {
+                router.push(`/verify/${encodeURIComponent(trackingId.trim())}`);
+              }
+            }}
+            className="mb-8 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row"
+          >
+            <label htmlFor="tracking-id" className="sr-only">
+              Mã tra cứu văn bằng
+            </label>
+            <input
+              id="tracking-id"
+              value={trackingId}
+              onChange={(event) => setTrackingId(event.target.value)}
+              placeholder="Nhập mã tra cứu văn bằng"
+              className="min-w-0 grow rounded-lg border border-slate-300 px-3 py-2"
+            />
+            <button
+              type="submit"
+              disabled={!trackingId.trim()}
+              className="rounded-lg bg-blue-700 px-5 py-2 font-semibold text-white disabled:opacity-50"
+            >
+              Tra cứu
+            </button>
+          </form>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             {/* Form Nhập Liệu */}
@@ -289,6 +367,18 @@ export default function VerifyPage() {
                   <p className="text-red-600 font-medium text-sm mb-4">
                     {result.message || "Lỗi không xác định."}
                   </p>
+                  {result.signer_info && (
+                    <div className="w-full rounded-lg border border-red-100 bg-white p-4 text-left text-sm">
+                      <p>
+                        <span className="font-semibold">Người ký: </span>
+                        {result.signer_info.subject}
+                      </p>
+                      <p className="mt-1">
+                        <span className="font-semibold">Chứng thư cấp bởi: </span>
+                        {result.signer_info.issuer}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -300,4 +390,3 @@ export default function VerifyPage() {
     </div>
   );
 }
-

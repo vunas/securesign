@@ -110,7 +110,9 @@ export async function forceLogout() {
 
   if (typeof window !== 'undefined') {
     localStorage.removeItem('username');
-    window.location.href = '/login';
+    localStorage.removeItem('role');
+    window.dispatchEvent(new Event('securesign:auth-changed'));
+    window.dispatchEvent(new Event('securesign:session-expired'));
   }
 }
 
@@ -120,4 +122,3 @@ export function getCurrentUsername(): string | null {
   }
   return null;
 }
-

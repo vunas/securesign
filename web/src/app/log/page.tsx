@@ -1,10 +1,24 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { fetchAPI, getCurrentUsername } from "@/lib/api";
+import { showToast } from "@/lib/swal";
+
+function subscribeAuth(callback: () => void) {
+  window.addEventListener("storage", callback);
+  window.addEventListener("securesign:auth-changed", callback);
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener("securesign:auth-changed", callback);
+  };
+}
+
+function getRoleSnapshot() {
+  return typeof window === "undefined" ? null : localStorage.getItem("role");
+}
 
 interface AuditLog {
   id: number;
@@ -31,24 +45,53 @@ interface VerifyLog {
   created_at: string;
 }
 
+interface AuditIntegrityResult {
+  valid: boolean;
+  checked_entries: number;
+  legacy_entries: number;
+  invalid_entry_id: number | null;
+}
+
 export default function LogPage() {
   const router = useRouter();
+  const role = useSyncExternalStore(subscribeAuth, getRoleSnapshot, () => null);
   const [activeTab, setActiveTab] = useState<"audit" | "verify">("audit");
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [verifyLogs, setVerifyLogs] = useState<VerifyLog[]>([]);
   const [loading, setLoading] = useState(false);
+  const [actionFilter, setActionFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [integrityResult, setIntegrityResult] = useState<AuditIntegrityResult | null>(null);
+
+  const checkAuditChain = async () => {
+    try {
+      const result = await fetchAPI<AuditIntegrityResult>("/api/logs/audit/verify-chain");
+      setIntegrityResult(result);
+      showToast(
+        result.valid
+          ? `Chuỗi khớp (${result.checked_entries} bản ghi, ${result.legacy_entries} bản ghi đời cũ).`
+          : `Phát hiện sai lệch tại bản ghi #${result.invalid_entry_id}.`,
+        result.valid && result.legacy_entries === 0 ? "success" : "warning",
+      );
+    } catch (error) {
+      console.error("Không thể kiểm tra tính toàn vẹn audit:", error);
+    }
+  };
 
   const loadAuditLogs = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchAPI<AuditLog[]>("/api/logs/audit?limit=50");
+      const params = new URLSearchParams({ limit: "50" });
+      if (actionFilter.trim()) params.set("action", actionFilter.trim());
+      if (statusFilter) params.set("status", statusFilter);
+      const data = await fetchAPI<AuditLog[]>(`/api/logs/audit?${params}`);
       setAuditLogs(data || []);
     } catch (e) {
       console.error("Lỗi tải Audit logs:", e);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [actionFilter, statusFilter]);
 
   const loadVerifyLogs = useCallback(async () => {
     setLoading(true);
@@ -118,6 +161,34 @@ export default function LogPage() {
         text: "Tạo khóa",
         color: "text-purple-600 bg-purple-50 border border-purple-100",
       },
+      ISSUE_AND_SIGN_CREDENTIAL: {
+        text: "Phát hành văn bằng",
+        color: "text-emerald-700 bg-emerald-50 border border-emerald-100",
+      },
+      REVOKE_CREDENTIAL: {
+        text: "Thu hồi văn bằng",
+        color: "text-rose-700 bg-rose-50 border border-rose-100",
+      },
+      REGISTER_TENANT: {
+        text: "Đăng ký tổ chức",
+        color: "text-blue-700 bg-blue-50 border border-blue-100",
+      },
+      REVIEW_TENANT: {
+        text: "Xét duyệt tổ chức",
+        color: "text-indigo-700 bg-indigo-50 border border-indigo-100",
+      },
+      CREATE_API_KEY: {
+        text: "Tạo API key",
+        color: "text-purple-700 bg-purple-50 border border-purple-100",
+      },
+      REVOKE_API_KEY: {
+        text: "Thu hồi API key",
+        color: "text-rose-700 bg-rose-50 border border-rose-100",
+      },
+      REVOKE_KEY: {
+        text: "Thu hồi khóa",
+        color: "text-rose-700 bg-rose-50 border border-rose-100",
+      },
       CREATE_ROOT_CA: {
         text: "Tạo Root CA",
         color: "text-rose-600 bg-rose-50 border border-rose-100",
@@ -180,18 +251,40 @@ export default function LogPage() {
                 tài liệu.
               </p>
             </div>
-            <button
-              onClick={() =>
-                activeTab === "audit" ? loadAuditLogs() : loadVerifyLogs()
-              }
-              className="bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 font-semibold py-2 px-5 rounded-xl shadow-sm transition-all duration-200 flex items-center h-fit cursor-pointer"
-            >
-              <i
-                className={`fa-solid fa-rotate-right mr-2 ${loading ? "fa-spin" : ""}`}
-              ></i>{" "}
-              Làm mới dữ liệu
-            </button>
+            <div className="flex flex-wrap gap-2">
+              {(role === "PLATFORM_SUPER_ADMIN" || role === "TENANT_ADMIN") && (
+                <button
+                  onClick={() => void checkAuditChain()}
+                  className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 font-semibold text-amber-900"
+                >
+                  Kiểm tra chuỗi Audit
+                </button>
+              )}
+              <button
+                onClick={() =>
+                  activeTab === "audit" ? loadAuditLogs() : loadVerifyLogs()
+                }
+                className="bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 font-semibold py-2 px-5 rounded-xl shadow-sm transition-all duration-200 flex items-center h-fit cursor-pointer"
+              >
+                <i
+                  className={`fa-solid fa-rotate-right mr-2 ${loading ? "fa-spin" : ""}`}
+                ></i>{" "}
+                Làm mới dữ liệu
+              </button>
+            </div>
           </div>
+          {integrityResult && (
+            <p className={`mb-5 rounded-lg p-4 text-sm ${
+              integrityResult.valid && integrityResult.legacy_entries === 0
+                ? "bg-emerald-50 text-emerald-800"
+                : "bg-amber-50 text-amber-900"
+            }`}>
+              {integrityResult.valid
+                ? `Chuỗi HMAC khớp ${integrityResult.checked_entries} bản ghi. Bản ghi chưa ký HMAC: ${integrityResult.legacy_entries}.`
+                : `Chuỗi có thể đã bị thay đổi tại bản ghi #${integrityResult.invalid_entry_id}.`}
+              {" "}Việc xóa phần đuôi lịch sử vẫn cần checkpoint lưu ngoài cơ sở dữ liệu để phát hiện.
+            </p>
+          )}
 
           {/* TABS CHUYỂN ĐỔI CHẾ ĐỘ */}
           <div className="flex space-x-1 bg-slate-100 p-1 rounded-xl mb-6 w-full md:w-fit">
@@ -219,6 +312,52 @@ export default function LogPage() {
               <i className="fa-solid fa-file-shield mr-2"></i>Xác Thực (Verify)
             </button>
           </div>
+
+          {activeTab === "audit" && (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void loadAuditLogs();
+              }}
+              className="mb-6 flex flex-col gap-3 rounded-xl bg-white p-4 shadow-sm sm:flex-row"
+            >
+              <label className="sr-only" htmlFor="audit-action-filter">Lọc theo hành động</label>
+              <input
+                id="audit-action-filter"
+                value={actionFilter}
+                onChange={(event) => setActionFilter(event.target.value)}
+                placeholder="Tên hành động (ví dụ ISSUE_AND_SIGN_CREDENTIAL)"
+                className="min-w-0 grow rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+              <label className="sr-only" htmlFor="audit-status-filter">Lọc theo trạng thái</label>
+              <select
+                id="audit-status-filter"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="">Mọi trạng thái</option>
+                <option value="SUCCESS">Thành công</option>
+                <option value="FAILED">Thất bại</option>
+                <option value="PENDING">Đang xử lý</option>
+              </select>
+              <button type="submit" className="rounded-lg bg-indigo-700 px-5 py-2 text-sm font-semibold text-white">
+                Lọc
+              </button>
+              {typeof window !== "undefined" &&
+                localStorage.getItem("role") === "TENANT_ADMIN" && (
+                  <a
+                    href={`/api/logs/audit/export?${new URLSearchParams({
+                      ...(actionFilter.trim() ? { action: actionFilter.trim() } : {}),
+                      ...(statusFilter ? { status: statusFilter } : {}),
+                    })}`}
+                    className="rounded-lg border border-slate-300 px-4 py-2 text-center text-sm font-semibold text-slate-700"
+                  >
+                    Xuất CSV
+                  </a>
+                )}
+            </form>
+          )}
 
           {/* PANEL 1: AUDIT LOGS */}
           {activeTab === "audit" && (
