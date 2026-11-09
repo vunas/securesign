@@ -6,6 +6,10 @@ from app.models.enums import CredentialStatus
 
 
 class CredentialRepository:
+    async def get_by_tracking_id(self, db: AsyncSession, tracking_id: str):
+        result = await db.execute(select(Credential).where(Credential.tracking_id == tracking_id))
+        return result.scalar_one_or_none()
+
     async def get_by_id(self, db: AsyncSession, credential_id: int, tenant_id: int):
         stmt = select(Credential).where(
             Credential.id == credential_id, Credential.tenant_id == tenant_id

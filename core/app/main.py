@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.middleware import LoggingMiddleware
 from app.routers import (
+    api_key_router,
     auth_router,
     certificate_router,
     credential_router,
@@ -12,6 +13,8 @@ from app.routers import (
     key_router,
     log_router,
     signature_router,
+    tenant_router,
+    tenant_user_router,
     verify_router,
 )
 
@@ -46,6 +49,9 @@ async def health_check():
 
 # 4. ĐĂNG KÝ CÁC API ROUTERS
 app.include_router(auth_router.router)
+app.include_router(api_key_router.router)
+app.include_router(tenant_router.router)
+app.include_router(tenant_user_router.router)
 app.include_router(key_router.router)
 app.include_router(certificate_router.router)
 app.include_router(verify_router.router)

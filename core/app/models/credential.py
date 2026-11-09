@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from sqlalchemy import JSON, Date, DateTime, Enum, ForeignKey, Index, String, Text
@@ -73,4 +73,4 @@ class Credential(Base):
     def revoke(self, reason: str | None = None) -> None:
         self.status = CredentialStatus.REVOKED
         self.revocation_reason = reason
-        self.revoked_at = datetime.now()
+        self.revoked_at = datetime.now(UTC)

@@ -35,7 +35,6 @@ COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /app/app ./app
 
 RUN useradd -m -u 10001 appuser \
-  && mkdir -p /app/storage/uploads /app/storage/signed \
   && chown -R appuser:appuser /app
 
 USER appuser
