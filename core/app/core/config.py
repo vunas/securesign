@@ -22,9 +22,7 @@ class Settings(BaseSettings):
     COOKIE_SECURE: bool = False
 
     # ENCRYPTION
-    ENCRYPTION_KEY: str = Field(
-        default=_DEMO_ENCRYPTION_KEY, min_length=44, max_length=44
-    )
+    ENCRYPTION_KEY: str = Field(default=_DEMO_ENCRYPTION_KEY, min_length=44, max_length=44)
     TSA_URL: str = "http://timestamp.digicert.com"
     PUBLIC_APP_URL: str = "http://localhost:3000"
     DEFAULT_MONTHLY_SIGNING_LIMIT: int = 1000
@@ -33,8 +31,7 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_secrets(self):
         if self.APP_ENV == "production" and (
-            self.SECRET_KEY == _DEMO_SECRET_KEY
-            or self.ENCRYPTION_KEY == _DEMO_ENCRYPTION_KEY
+            self.SECRET_KEY == _DEMO_SECRET_KEY or self.ENCRYPTION_KEY == _DEMO_ENCRYPTION_KEY
         ):
             raise ValueError("Production requires independently generated secret keys.")
 

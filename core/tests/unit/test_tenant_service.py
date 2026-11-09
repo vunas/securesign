@@ -39,7 +39,9 @@ async def test_register_creates_pending_tenant_and_tenant_admin(monkeypatch):
 @pytest.mark.asyncio
 async def test_review_approval_creates_initial_quota(monkeypatch):
     service = TenantService()
-    tenant = SimpleNamespace(id=9, tenant_code="UNI", name="University", status=TenantStatus.PENDING)
+    tenant = SimpleNamespace(
+        id=9, tenant_code="UNI", name="University", status=TenantStatus.PENDING
+    )
     reviewer = SimpleNamespace(id=4)
     db = SimpleNamespace(get=AsyncMock(return_value=tenant), add=Mock(), flush=AsyncMock())
     monkeypatch.setattr("app.services.tenant_service.log_service.log_action", AsyncMock())

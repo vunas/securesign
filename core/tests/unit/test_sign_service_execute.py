@@ -27,9 +27,7 @@ def test_execute_pdf_signing_uses_memory_buffers_and_requires_timestamp(monkeypa
 
         def sign_pdf(self, writer, output, appearance_text_params=None):
             calls["sign"] += 1
-            assert appearance_text_params == {
-                "url": "https://example.test/verify/id"
-            }
+            assert appearance_text_params == {"url": "https://example.test/verify/id"}
             output.write(b"signed")
 
     monkeypatch.setattr("app.services.sign_service.signers.PdfSigner", FakePdfSigner)

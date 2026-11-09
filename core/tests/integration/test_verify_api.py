@@ -37,9 +37,7 @@ async def test_verify_endpoint_calls_service_and_returns_payload(
 async def test_verify_endpoint_accepts_pdf_file_with_generic_content_type(
     monkeypatch, client_full, override_current_user_full
 ):
-    verify_pdf = AsyncMock(
-        return_value={"is_valid": True, "message": "valid", "signer_info": None}
-    )
+    verify_pdf = AsyncMock(return_value={"is_valid": True, "message": "valid", "signer_info": None})
     monkeypatch.setattr("app.routers.verify_router.verify_service.verify_pdf_signature", verify_pdf)
 
     res = await client_full.post(

@@ -11,9 +11,7 @@ from app.services.log_service import log_service
 class TenantUserService:
     async def list_users(self, db: AsyncSession, tenant_id: int) -> list[User]:
         result = await db.execute(
-            select(User)
-            .where(User.tenant_id == tenant_id)
-            .order_by(User.created_at.desc())
+            select(User).where(User.tenant_id == tenant_id).order_by(User.created_at.desc())
         )
         return list(result.scalars().all())
 

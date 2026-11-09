@@ -30,13 +30,12 @@ class LoggingMiddleware:
         logger.info(f"Incoming: {method} {url} - IP: {client_ip or 'Unknown'}")
 
         try:
+
             async def send_with_timing(message):
                 if message["type"] == "http.response.start":
                     process_time = (time.time() - start_time) * 1000
                     headers = list(message.get("headers", []))
-                    headers.append(
-                        (b"x-process-time", f"{process_time:.2f}".encode("ascii"))
-                    )
+                    headers.append((b"x-process-time", f"{process_time:.2f}".encode("ascii")))
                     message["headers"] = headers
                     logger.info(
                         f"Outgoing: {method} {url} - Status: {message['status']} "

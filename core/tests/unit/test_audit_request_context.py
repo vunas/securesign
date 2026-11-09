@@ -10,9 +10,7 @@ from app.services.log_service import LogService
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_audit_log_captures_request_ip_and_user_agent():
-    latest_log_result = SimpleNamespace(
-        scalars=lambda: SimpleNamespace(first=lambda: None)
-    )
+    latest_log_result = SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: None))
     db = SimpleNamespace(
         execute=AsyncMock(side_effect=[latest_log_result]),
         add=Mock(),

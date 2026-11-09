@@ -116,9 +116,7 @@ async def update_tenant_quota(
     reviewer: PlatformAdminDep,
 ):
     try:
-        quota = await tenant_service.update_quota(
-            db, tenant_id, payload.monthly_limit, reviewer
-        )
+        quota = await tenant_service.update_quota(db, tenant_id, payload.monthly_limit, reviewer)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if quota is None:

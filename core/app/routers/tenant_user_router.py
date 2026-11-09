@@ -19,15 +19,11 @@ async def list_tenant_users(db: DatabaseDep, admin: TenantAdminDep):
 
 
 @router.post("/", response_model=TenantUserResponse, status_code=status.HTTP_201_CREATED)
-async def create_tenant_operator(
-    payload: TenantUserCreate, db: DatabaseDep, admin: TenantAdminDep
-):
+async def create_tenant_operator(payload: TenantUserCreate, db: DatabaseDep, admin: TenantAdminDep):
     if admin.tenant_id is None:
         raise HTTPException(status_code=403, detail="Tenant role required.")
     try:
-        return await tenant_user_service.create_operator(
-            db, admin.tenant_id, payload, admin
-        )
+        return await tenant_user_service.create_operator(db, admin.tenant_id, payload, admin)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 

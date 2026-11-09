@@ -91,9 +91,7 @@ class TestSignServiceFlow:
         inter = SimpleNamespace(certificate_data="PEM-TEXT")
         db = SimpleNamespace(
             execute=AsyncMock(
-                return_value=SimpleNamespace(
-                    scalars=lambda: SimpleNamespace(all=lambda: [inter])
-                )
+                return_value=SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [inter]))
             )
         )
         monkeypatch.setattr("app.services.sign_service.pem.detect", lambda b: True)

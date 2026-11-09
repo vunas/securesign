@@ -64,9 +64,7 @@ async def test_qr_stamp_pdf_signs_and_verifies_without_external_tsa(monkeypatch)
             serialization.NoEncryption(),
         )
     )
-    signer_certificate = x509.Certificate.load(
-        certificate.public_bytes(serialization.Encoding.DER)
-    )
+    signer_certificate = x509.Certificate.load(certificate.public_bytes(serialization.Encoding.DER))
 
     signed_pdf, _ = await asyncio.to_thread(
         SignService()._execute_pdf_signing,

@@ -109,7 +109,14 @@ class VerifyService:
                     "revocation_reason": credential.revocation_reason,
                 }
                 await self._record_verification(
-                    db, user_id, tenant_id, filename, content_hash, tracking_id, credential_id, result
+                    db,
+                    user_id,
+                    tenant_id,
+                    filename,
+                    content_hash,
+                    tracking_id,
+                    credential_id,
+                    result,
                 )
                 return result
             root_result = await db.execute(
@@ -140,7 +147,14 @@ class VerifyService:
                     "signer_info": None,
                 }
                 await self._record_verification(
-                    db, user_id, tenant_id, filename, content_hash, tracking_id, credential_id, result
+                    db,
+                    user_id,
+                    tenant_id,
+                    filename,
+                    content_hash,
+                    tracking_id,
+                    credential_id,
+                    result,
                 )
                 return result
 
@@ -338,9 +352,7 @@ class VerifyService:
             }
 
             try:
-                status = validation.validate_pdf_signature(
-                    sig_field, signer_validation_context=vc
-                )
+                status = validation.validate_pdf_signature(sig_field, signer_validation_context=vc)
             except PathBuildingError:
                 return {
                     "is_valid": False,
