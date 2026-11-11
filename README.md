@@ -6,6 +6,7 @@ SecureSign is a multi-tenant digital credential issuance and verification system
 
 - `core/`: asynchronous FastAPI application, SQLAlchemy persistence, tenant/RBAC services, private PKI, signing, verification, API keys, and audit logs.
 - `web/`: Next.js App Router application for registration, tenant operations, signing, tracking, verification, and administration.
+- `web-lms-demo/`: standalone Next.js external client that simulates a university LMS calling the batch-signing API.
 - `docker-compose.yml`: PostgreSQL, API, and web services.
 
 PDF content is processed for the duration of a request and is not stored as a credential file. The database stores credential metadata and hashes.
@@ -14,7 +15,8 @@ PDF content is processed for the duration of a request and is not stored as a cr
 
 - Organization registration, platform-admin approval, and active-tenant access control.
 - Tenant roles, monthly signing quota, server-generated RSA/ECDSA keys, and X.509 signing certificates.
-- PAdES PDF signing with an RFC 3161 TSA timestamp and QR-based public tracking URL.
+- PAdES PDF signing with an RFC 3161 TSA timestamp and a compact QR code linking
+  to public verification.
 - In-memory issuance and batch signing; signed files are returned to the caller.
 - Public credential lookup, uploaded-PDF signature verification, and credential/key revocation.
 - Tenant API-key creation/revocation, one-time secret display, batch API authentication, and per-minute request limits.
@@ -90,13 +92,23 @@ For HTTPS deployments, set `COOKIE_SECURE=true` and use an HTTPS `PUBLIC_APP_URL
 pnpm dev                 # Start API and web in development mode
 pnpm dev:core            # Start only FastAPI
 pnpm dev:web             # Start only Next.js
+pnpm dev:lms             # Start the external LMS demo on port 3001
+pnpm dev:all             # Start API, tenant web, and LMS demo
 pnpm lint:core           # Ruff checks
 pnpm test:core           # Backend tests
 pnpm lint:web            # ESLint
 pnpm build:web           # Next.js production build
+pnpm lint:lms            # LMS demo ESLint
+pnpm build:lms           # LMS demo production build
 pnpm seed:core           # Create demo schema/data without deleting existing data
 pnpm seed:core:reset     # Destructively reset and recreate demo data
 ```
+
+The external LMS demo is available at `http://localhost:3001` when started with
+`pnpm dev:lms` or `pnpm dev:all`. It accepts a tenant `X-API-Key`, signing key
+ID, PDF files, and per-document metadata, then downloads the ZIP returned by
+`POST /api/batch/sign`. See [docs/lms-demo.md](docs/lms-demo.md) for the
+integration flow and Docker usage.
 
 ## API entry points
 
