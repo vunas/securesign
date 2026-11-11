@@ -49,5 +49,22 @@ services:
     ports:
       - "3000:3000"
 
+  web-lms-demo:
+    build:
+      context: .
+      dockerfile: web-lms-demo/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${LMS_NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    depends_on:
+      - api
+    environment:
+      NEXT_PUBLIC_API_URL: ${LMS_NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      SECURESIGN_API_URL: ${SECURESIGN_API_URL:-http://api:8000}
+      SECURESIGN_API_KEY: ${SECURESIGN_API_KEY:-}
+      SECURESIGN_API_SECRET: ${SECURESIGN_API_SECRET:-}
+      SECURESIGN_SIGNING_KEY_ID: ${SECURESIGN_SIGNING_KEY_ID:-}
+    ports:
+      - "${LMS_PORT:-3001}:3000"
+
 volumes:
   postgres_data:

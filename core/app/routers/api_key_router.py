@@ -17,6 +17,7 @@ from app.models.audit_log import AuditLog
 from app.models.enums import TargetResourceType, TenantStatus
 from app.models.tenant import Tenant
 from app.repositories.api_key_repo import api_key_repo
+from app.repositories.key_repo import key_repo
 from app.schemas.api_key_schema import (
     ApiKeyCreate,
     ApiKeyCreated,
@@ -27,6 +28,7 @@ from app.schemas.signature_schema import SignatureCreate
 from app.services.api_key_service import api_key_service
 from app.services.file_service import file_service
 from app.services.log_service import log_service
+from app.services.quota_service import QuotaExceededError
 from app.utils.file_utils import MAX_FILE_SIZE
 
 router = APIRouter(tags=["API Keys"])
@@ -127,12 +129,27 @@ async def get_api_key(
 ApiKeyDep = Annotated[ApiKey, Depends(get_api_key)]
 
 
-@router.post("/api/batch/sign")
+@router.post(
+    "/api/batch/sign",
+    summary="Ký số hàng loạt qua API",
+    description=(
+        "Nhận tối đa 10 PDF và một mảng metadata tương ứng, xác thực bằng X-API-Key, "
+        "tự chọn khóa ký mặc định hợp lệ của tenant nếu không truyền key_id, ký PAdES "
+        "và trả về một ZIP chứa các PDF đã ký cùng tracking-ids.json."
+    ),
+    response_class=StreamingResponse,
+    responses={
+        status.HTTP_200_OK: {
+            "description": "ZIP chứa PDF đã ký và tracking-ids.json.",
+            "content": {"application/zip": {}},
+        }
+    },
+)
 async def batch_sign(
     db: DatabaseDep,
     api_key: ApiKeyDep,
     files: list[UploadFile] = File(...),
-    key_id: int = Form(...),
+    key_id: int | None = Form(default=None),
     batch_metadata: str = Form(...),
 ):
     if not files or len(files) > 10:
@@ -150,6 +167,14 @@ async def batch_sign(
             status_code=422,
             detail="Cần một đối tượng metadata tương ứng cho mỗi tệp PDF.",
         )
+    if key_id is None:
+        signing_keys = await key_repo.get_signing_keys(db, api_key.tenant_id)
+        if not signing_keys:
+            raise HTTPException(
+                status_code=422,
+                detail="Tenant chưa có khóa ký mặc định hợp lệ.",
+            )
+        key_id = signing_keys[0].id
 
     archive_buffer = io.BytesIO()
     total_upload_size = 0
@@ -204,6 +229,13 @@ async def batch_sign(
                 archive.writestr(f"{index:02d}-{secrets.token_hex(4)}.pdf", signed_pdf)
                 tracking_ids.append(tracking_id)
             archive.writestr("tracking-ids.json", json.dumps(tracking_ids))
+    except QuotaExceededError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "QUOTA_EXCEEDED", "message": str(exc)},
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     finally:
         for file in files:
             await file.close()
@@ -212,5 +244,8 @@ async def batch_sign(
     return StreamingResponse(
         archive_buffer,
         media_type="application/zip",
-        headers={"Content-Disposition": 'attachment; filename="signed-credentials.zip"'},
+        headers={
+            "Content-Disposition": 'attachment; filename="signed-credentials.zip"',
+            "X-Tracking-IDs": json.dumps(tracking_ids),
+        },
     )
