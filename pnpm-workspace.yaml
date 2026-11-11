@@ -1,4 +1,5 @@
 packages:
   - "web"
+  - "web-lms-demo"
 allowBuilds:
   unrs-resolver: false

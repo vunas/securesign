@@ -210,10 +210,11 @@ class SignService:
             embed_validation_info=False,
         )
 
-        stamp_style = (
-            QRStampStyle(stamp_text="Thẩm tra văn bằng\n%(url)s")
-            if sign_data.verification_url
-            else None
+        stamp_style = QRStampStyle(
+            stamp_text="",
+            border_width=0,
+            background_opacity=0,
+            qr_inner_size=48,
         )
         pdf_signer = signers.PdfSigner(
             metadata,
@@ -223,16 +224,13 @@ class SignService:
             new_field_spec=SigFieldSpec(
                 sig_field_name=metadata.field_name,
                 on_page=-1,
-                box=(36, 36, 270, 120),
+                box=(36, 36, 108, 108),
             ),
-        )
-        appearance_text_params = (
-            {"url": sign_data.verification_url} if sign_data.verification_url else None
         )
         pdf_signer.sign_pdf(
             pdf_writer,
             output=output_buffer,
-            appearance_text_params=appearance_text_params,
+            appearance_text_params={"url": sign_data.verification_url},
         )
 
         signed_content = output_buffer.getvalue()

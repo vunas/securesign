@@ -1,0 +1,11 @@
+.git
+.next
+node_modules
+venv
+core/.venv
+core/__pycache__
+web/.next
+web/node_modules
+web-lms-demo/.next
+web-lms-demo/node_modules
+*.log

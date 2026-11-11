@@ -6,8 +6,12 @@
     "dev": "concurrently -n \"CORE,WEB\" -c \"green,cyan\" \"pnpm dev:core\" \"pnpm dev:web\"",
     "dev:core": "uv run --directory core python -m uvicorn app.main:app --reload --port 8000",
     "dev:web": "pnpm --filter web dev",
+    "dev:lms": "pnpm --filter web-lms-demo dev",
+    "dev:all": "concurrently -n \"CORE,WEB,LMS\" -c \"green,cyan,magenta\" \"pnpm dev:core\" \"pnpm dev:web\" \"pnpm dev:lms\"",
     "build:web": "pnpm --filter web build",
+    "build:lms": "pnpm --filter web-lms-demo build",
     "lint:web": "pnpm --filter web lint",
+    "lint:lms": "pnpm --filter web-lms-demo lint",
     "lint:core": "uv run --directory core ruff check .",
     "test:core": "uv run --directory core pytest",
     "seed:core": "uv run --directory core python -m app.db.seed.seed_data --force"
