@@ -1,5 +1,6 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import (
@@ -12,8 +13,11 @@ from app.core.security import (
 # Centralized Enums
 from app.models.enums import TargetResourceType, TenantStatus, UserRole
 from app.models.tenant import Tenant
+from app.models.user import User
 from app.repositories.user_repo import user_repo
+from app.schemas.api_key_schema import ApiKeyCreate
 from app.schemas.user_schema import UserCreate
+from app.services.api_key_service import api_key_service
 from app.services.log_service import log_service
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
@@ -21,6 +25,25 @@ REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 
 class AuthService:
+    async def consume_initial_api_credentials(
+        self, db: AsyncSession, user: User
+    ) -> dict[str, str] | None:
+        tenant_id = getattr(user, "tenant_id", None)
+        if tenant_id is None or getattr(user, "role", None) != UserRole.TENANT_ADMIN:
+            return None
+        locked_user = await db.scalar(select(User).where(User.id == user.id).with_for_update())
+        if locked_user is None or locked_user.initial_api_credentials_issued_at is not None:
+            return None
+        api_key, secret = await api_key_service.create(
+            db,
+            tenant_id=tenant_id,
+            request=ApiKeyCreate(name="Initial integration key"),
+            user_id=user.id,
+        )
+        locked_user.initial_api_credentials_issued_at = datetime.now(UTC)
+        await db.flush()
+        return {"api_key": api_key.key_prefix, "api_secret": secret}
+
     async def register_user(self, db: AsyncSession, user_in: UserCreate):
         user = await user_repo.get_by_username(db, username=user_in.username)
         if user:

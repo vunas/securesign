@@ -35,7 +35,7 @@ class TenantResponse(BaseModel):
 
 
 class TenantProvisionedResponse(TenantResponse):
-    api_key_secret: str | None = None
+    pass
 
 
 class TenantAdminResponse(TenantResponse):

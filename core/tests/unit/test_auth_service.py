@@ -109,6 +109,43 @@ class TestAuthService:
                 db=object(), username="alice", password="wrong"
             )
 
+    async def test_consume_initial_api_credentials_reveals_secret_once(
+        self, auth_service, monkeypatch
+    ):
+        api_key = SimpleNamespace(key_prefix="ss_live_abc")
+        locked_user = SimpleNamespace(
+            id=1,
+            initial_api_credentials_issued_at=None,
+        )
+        db = SimpleNamespace(scalar=AsyncMock(return_value=locked_user), flush=AsyncMock())
+        monkeypatch.setattr(
+            "app.services.auth_service.api_key_service.create",
+            AsyncMock(return_value=(api_key, "ss_live_full-secret")),
+        )
+
+        credentials = await auth_service.consume_initial_api_credentials(
+            db, SimpleNamespace(id=1, tenant_id=1, role=UserRole.TENANT_ADMIN)
+        )
+
+        assert credentials == {
+            "api_key": "ss_live_abc",
+            "api_secret": "ss_live_full-secret",
+        }
+        assert locked_user.initial_api_credentials_issued_at is not None
+        db.flush.assert_awaited_once()
+
+    async def test_consume_initial_api_credentials_ignores_non_admin(
+        self, auth_service, monkeypatch
+    ):
+        db = SimpleNamespace(scalar=AsyncMock(), flush=AsyncMock())
+
+        result = await auth_service.consume_initial_api_credentials(
+            db, SimpleNamespace(tenant_id=1, role=UserRole.TENANT_OPERATOR)
+        )
+
+        assert result is None
+        db.scalar.assert_not_awaited()
+
     async def test_refresh_access_token_empty_token_raises_value_error(self, auth_service):
         # Arrange / Act / Assert
         with pytest.raises(ValueError, match="không tồn tại"):

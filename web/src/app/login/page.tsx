@@ -5,11 +5,25 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { showAlert } from "@/lib/swal";
 
+interface InitialApiCredentials {
+  api_key: string;
+  api_secret: string;
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [initialCredentials, setInitialCredentials] = useState<InitialApiCredentials | null>(null);
+
+  const continueToApp = () => {
+    router.push(
+      localStorage.getItem("role") === "PLATFORM_SUPER_ADMIN"
+        ? "/admin/tenants"
+        : "/dashboard",
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,9 +49,11 @@ export default function LoginPage() {
           localStorage.setItem("role", data.role || "");
           window.dispatchEvent(new Event("securesign:auth-changed"));
         }
-        router.push(
-          data.role === "PLATFORM_SUPER_ADMIN" ? "/admin/tenants" : "/dashboard",
-        );
+        if (data.initial_api_credentials) {
+          setInitialCredentials(data.initial_api_credentials);
+        } else {
+          continueToApp();
+        }
       } else {
         throw new Error(data.detail || "Sai thông tin đăng nhập");
       }
@@ -124,6 +140,61 @@ export default function LoginPage() {
             Đăng ký tổ chức
           </Link>
         </p>
+      </div>
+
+      {initialCredentials && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="initial-api-title"
+            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+          >
+            <h2 id="initial-api-title" className="text-xl font-bold text-slate-900">
+              Thông tin tích hợp API
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Secret chỉ hiển thị một lần. Hãy sao chép và lưu tại nơi an toàn trước khi tiếp tục.
+              API secret là giá trị dùng trong header <code>X-API-Key</code> khi tích hợp.
+            </p>
+            <div className="mt-5 space-y-4">
+              <CredentialRow label="API key" value={initialCredentials.api_key} />
+              <CredentialRow label="API secret" value={initialCredentials.api_secret} sensitive />
+            </div>
+            <button
+              type="button"
+              onClick={continueToApp}
+              className="mt-6 w-full rounded-lg bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-700"
+            >
+              Tôi đã lưu thông tin, tiếp tục
+            </button>
+          </section>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CredentialRow({
+  label,
+  value,
+  sensitive = false,
+}: {
+  label: string;
+  value: string;
+  sensitive?: boolean;
+}) {
+  const copy = () => void navigator.clipboard.writeText(value);
+  return (
+    <div>
+      <p className="mb-1 text-sm font-semibold text-slate-700">{label}</p>
+      <div className="flex items-center gap-2 rounded-lg bg-slate-100 p-2">
+        <code className={`min-w-0 flex-1 break-all text-sm ${sensitive ? "text-amber-800" : "text-slate-800"}`}>
+          {value}
+        </code>
+        <button type="button" onClick={copy} className="shrink-0 rounded bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm">
+          Sao chép
+        </button>
       </div>
     </div>
   );

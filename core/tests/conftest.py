@@ -81,10 +81,18 @@ def override_get_db(db_session: AsyncSession):
 
 @pytest.fixture()
 def fastapi_app_full(override_get_db) -> FastAPI:
-    from app.routers import auth_router, key_router, log_router, signature_router, verify_router
+    from app.routers import (
+        auth_router,
+        credential_router,
+        key_router,
+        log_router,
+        signature_router,
+        verify_router,
+    )
 
     app = FastAPI()
     app.include_router(auth_router.router)
+    app.include_router(credential_router.router)
     app.include_router(signature_router.router)
     app.include_router(verify_router.router)
     app.include_router(key_router.router)
