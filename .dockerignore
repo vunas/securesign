@@ -1,11 +1,37 @@
+# Git & Environment
 .git
-.next
-node_modules
-venv
-core/.venv
-core/__pycache__
-web/.next
-web/node_modules
-web-lms-demo/.next
-web-lms-demo/node_modules
+.gitignore
+.env
+.env.*
+*.sqlite
+*.db
+
+# Python caches & virtual environments
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+**/__pycache__/
+**/_pycache__/
+**/.venv/
+**/venv/
+
+# Node.js dependencies & build outputs
+node_modules/
+.next/
+**/node_modules/
+**/.next/
+dist/
+build/
+
+# Logs & temporary files
 *.log
+storage/
+docs/
+terminals/
+agent-transcripts/
