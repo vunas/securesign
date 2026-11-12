@@ -131,7 +131,15 @@ class SignService:
                 private_key_bytes = key_record.private_key_encrypted
                 password = passphrase.encode("utf-8")
             else:
-                private_key_bytes = aes_service.decrypt_key(key_record.private_key_encrypted)
+                if getattr(key_record, "encrypted_dek", None) is not None:
+                    private_key_bytes = aes_service.decrypt_key_envelope(
+                        key_record.private_key_encrypted,
+                        key_record.encrypted_dek,
+                        key_record.private_key_nonce,
+                        key_record.encryption_version,
+                    )
+                else:
+                    private_key_bytes = aes_service.decrypt_key(key_record.private_key_encrypted)
                 password = None
 
             crypto_private_key = load_pem_private_key(private_key_bytes, password=password)
