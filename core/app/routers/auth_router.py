@@ -23,6 +23,7 @@ async def login(
         user, access_token, refresh_token = await auth_service.authenticate_and_generate_tokens(
             db=db, username=form_data.username, password=form_data.password
         )
+        initial_api_credentials = await auth_service.consume_initial_api_credentials(db, user)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -51,6 +52,7 @@ async def login(
         "message": "Đăng nhập thành công",
         "username": user.username,
         "role": user.role.value,
+        "initial_api_credentials": initial_api_credentials,
     }
 
 

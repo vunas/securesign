@@ -19,10 +19,6 @@ interface Tenant {
   used_count: number | null;
 }
 
-interface TenantReviewResult extends Tenant {
-  api_key_secret?: string | null;
-}
-
 const STATUS_LABELS: Record<Tenant["status"], string> = {
   PENDING: "Chờ duyệt",
   ACTIVE: "Đang hoạt động",
@@ -35,7 +31,6 @@ export default function TenantApprovalPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [filter, setFilter] = useState("");
   const [error, setError] = useState("");
-  const [initialApiKey, setInitialApiKey] = useState("");
   const [loading, setLoading] = useState(true);
 
   const loadTenants = useCallback(async () => {
@@ -67,12 +62,11 @@ export default function TenantApprovalPage() {
     const reason = approve ? null : window.prompt("Lý do từ chối đăng ký:");
     if (!approve && !reason?.trim()) return;
     try {
-      const result = await fetchAPI<TenantReviewResult>(
+      await fetchAPI<Tenant>(
         `/api/admin/tenants/${tenant.id}/review`,
         "POST",
         { status: approve ? "ACTIVE" : "REJECTED", reason },
       );
-      if (result.api_key_secret) setInitialApiKey(result.api_key_secret);
       showToast(approve ? "Đã duyệt và khởi tạo PKI/API key" : "Đã từ chối đăng ký", "success");
       await loadTenants();
     } catch (cause) {
@@ -136,22 +130,6 @@ export default function TenantApprovalPage() {
         </div>
 
         {error && <p role="alert" className="mt-5 rounded-lg bg-red-50 p-4 text-red-700">{error}</p>}
-        {initialApiKey && (
-          <section className="mt-5 rounded-lg border border-amber-300 bg-amber-50 p-4">
-            <h2 className="font-bold text-amber-950">API key được tạo lúc duyệt</h2>
-            <p className="mt-1 text-sm text-amber-900">
-              Hãy chuyển secret an toàn cho tổ chức. Secret này chỉ hiển thị lần này.
-            </p>
-            <code className="mt-2 block break-all rounded bg-white p-3">{initialApiKey}</code>
-            <button
-              onClick={() => setInitialApiKey("")}
-              className="mt-3 rounded bg-amber-800 px-3 py-1.5 text-sm font-semibold text-white"
-            >
-              Đã lưu, đóng
-            </button>
-          </section>
-        )}
-
         <div className="mt-6 space-y-4">
           {tenants.map((tenant) => (
             <article key={tenant.id} className="rounded-xl bg-white p-5 shadow">

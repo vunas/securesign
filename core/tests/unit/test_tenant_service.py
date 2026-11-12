@@ -59,11 +59,6 @@ async def test_review_approval_creates_initial_quota(monkeypatch):
         "app.services.tenant_service.certificate_service.create_signed_cert",
         AsyncMock(return_value=intermediate),
     )
-    monkeypatch.setattr(
-        "app.services.tenant_service.api_key_service.create",
-        AsyncMock(return_value=(SimpleNamespace(id=4), "one-time-secret")),
-    )
-
     result, api_key_secret = await service.review(
         db,
         tenant_id=9,
@@ -73,7 +68,7 @@ async def test_review_approval_creates_initial_quota(monkeypatch):
 
     quota = db.add.call_args.args[0]
     assert result is tenant
-    assert api_key_secret == "one-time-secret"
+    assert api_key_secret is None
     assert tenant.status == TenantStatus.ACTIVE
     assert quota.tenant_id == tenant.id
     assert quota.used_count == 0

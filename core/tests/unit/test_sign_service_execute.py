@@ -9,7 +9,7 @@ pytestmark = pytest.mark.unit
 
 def test_execute_pdf_signing_uses_memory_buffers_and_requires_timestamp(monkeypatch):
     service = SignService()
-    calls = {"sign": 0}
+    calls = {"sign": 0, "field_spec": None}
 
     monkeypatch.setattr("app.services.sign_service.signers.SimpleSigner", lambda **kwargs: object())
     monkeypatch.setattr(
@@ -24,6 +24,7 @@ def test_execute_pdf_signing_uses_memory_buffers_and_requires_timestamp(monkeypa
     class FakePdfSigner:
         def __init__(self, *args, **kwargs):
             self.timestamper = kwargs["timestamper"]
+            calls["field_spec"] = kwargs["new_field_spec"]
 
         def sign_pdf(self, writer, output, appearance_text_params=None):
             calls["sign"] += 1
@@ -53,3 +54,5 @@ def test_execute_pdf_signing_uses_memory_buffers_and_requires_timestamp(monkeypa
     assert calls["sign"] == 1
     assert signed == b"signed"
     assert len(signed_hash) == 64
+    assert calls["field_spec"].on_page == -1
+    assert calls["field_spec"].box == (36, 36, 108, 108)

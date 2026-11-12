@@ -10,11 +10,9 @@ from app.models.enums import CertType, TargetResourceType, TenantStatus, UserRol
 from app.models.tenant import Tenant
 from app.models.tenant_quota import TenantQuota
 from app.models.user import User
-from app.schemas.api_key_schema import ApiKeyCreate
 from app.schemas.certificate_schema import CertificateCreate
 from app.schemas.key_schema import KeyCreate
 from app.schemas.tenant_schema import TenantRegistration, TenantStatusUpdate
-from app.services.api_key_service import api_key_service
 from app.services.certificate_service import certificate_service
 from app.services.key_service import key_service
 from app.services.log_service import log_service
@@ -95,7 +93,6 @@ class TenantService:
             raise ValueError("Cần nêu lý do khi từ chối đăng ký.")
 
         tenant.status = request.status
-        api_key_secret = None
         if request.status == TenantStatus.ACTIVE:
             today = date.today()
             period_start = today.replace(day=1)
@@ -172,12 +169,6 @@ class TenantService:
                 issuer_cert=intermediate_certificate,
                 user_id=reviewer.id,
             )
-            _, api_key_secret = await api_key_service.create(
-                db,
-                tenant.id,
-                ApiKeyCreate(name="Initial integration key"),
-                reviewer.id,
-            )
         await log_service.log_action(
             db=db,
             tenant_id=tenant.id,
@@ -191,7 +182,7 @@ class TenantService:
             },
         )
         await db.flush()
-        return tenant, api_key_secret
+        return tenant, None
 
     async def set_status(
         self, db: AsyncSession, tenant_id: int, status: TenantStatus, reviewer: User

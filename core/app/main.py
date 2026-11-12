@@ -1,9 +1,12 @@
+from contextlib import asynccontextmanager
+
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.middleware import LoggingMiddleware
+from app.db.database import init_db
 from app.routers import (
     api_key_router,
     auth_router,
@@ -18,11 +21,19 @@ from app.routers import (
     verify_router,
 )
 
+
 # 2. KHỞI TẠO FASTAPI APP
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    await init_db()
+    yield
+
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     description="Hệ thống Chữ ký số - Backend API",
+    lifespan=lifespan,
 )
 
 # 3. ĐĂNG KÝ MIDDLEWARE (Bảo mật CORS & Ghi Log)

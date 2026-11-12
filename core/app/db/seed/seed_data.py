@@ -79,7 +79,7 @@ async def run_seed(force=False):
             await db.commit()
 
             print("-" * 50)
-            print("✅ HOÀN TẤT SEED DATA")
+            print("HOÀN TẤT SEED DATA")
             print("-" * 50)
         except Exception as error:
             await db.rollback()

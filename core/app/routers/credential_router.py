@@ -33,7 +33,9 @@ async def issue_credential(
     signer_reason: str = Form("Cấp phát văn bằng"),
     signer_location: str = Form("Việt Nam"),
 ):
-    if file.content_type != "application/pdf":
+    if file.content_type != "application/pdf" and not (file.filename or "").lower().endswith(
+        ".pdf"
+    ):
         raise HTTPException(status_code=415, detail="Chỉ chấp nhận tệp PDF.")
 
     try:
