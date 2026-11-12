@@ -63,7 +63,10 @@ async def test_batch_sign_returns_zip_and_tracking_header(batch_app, monkeypatch
         )
 
     assert response.status_code == 200
-    assert json.loads(response.headers["x-tracking-ids"]) == ["tracking-Nguyen Van A", "tracking-Tran Thi B"]
+    assert json.loads(response.headers["x-tracking-ids"]) == [
+        "tracking-Nguyen Van A",
+        "tracking-Tran Thi B",
+    ]
     with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
         assert len([name for name in archive.namelist() if name.endswith(".pdf")]) == 2
         assert json.loads(archive.read("tracking-ids.json")) == [
@@ -127,14 +130,10 @@ async def test_batch_sign_maps_quota_error_to_forbidden(batch_app, monkeypatch):
         )
 
     assert response.status_code == 403
-    assert response.json() == {
-        "detail": {"code": "QUOTA_EXCEEDED", "message": "quota exhausted"}
-    }
+    assert response.json() == {"detail": {"code": "QUOTA_EXCEEDED", "message": "quota exhausted"}}
 
 
-async def test_batch_sign_maps_signing_validation_error_to_unprocessable(
-    batch_app, monkeypatch
-):
+async def test_batch_sign_maps_signing_validation_error_to_unprocessable(batch_app, monkeypatch):
     monkeypatch.setattr(
         api_key_router.file_service,
         "issue_and_sign_credential",

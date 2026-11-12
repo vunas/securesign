@@ -13,8 +13,8 @@ on:
       - ".github/workflows/core.yml"
 
 jobs:
-  lint-and-format:
-    name: Lint & Format Check
+  lint-format-security:
+    name: Lint, Format & Security
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -22,6 +22,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v7
@@ -110,16 +117,3 @@ jobs:
         env:
           DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test_db
         run: uv run pytest --cov=app tests/integration/
-
-  security-scan:
-    name: Secret Scanning
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: TruffleHog OSS
-        uses: trufflesecurity/trufflehog@main
-        with:
-          path: ./
