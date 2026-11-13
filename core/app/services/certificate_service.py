@@ -39,7 +39,15 @@ class CertificateService:
                 except Exception:
                     raise ValueError("Passphrase giải mã khóa không chính xác!")
             else:
-                priv_key_bytes = aes_service.decrypt_key(key_record.private_key_encrypted)
+                if getattr(key_record, "encrypted_dek", None) is not None:
+                    priv_key_bytes = aes_service.decrypt_key_envelope(
+                        key_record.private_key_encrypted,
+                        key_record.encrypted_dek,
+                        key_record.private_key_nonce,
+                        key_record.encryption_version,
+                    )
+                else:
+                    priv_key_bytes = aes_service.decrypt_key(key_record.private_key_encrypted)
                 return load_pem_private_key(priv_key_bytes, password=None)
 
     async def create_root_ca(

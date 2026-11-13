@@ -23,6 +23,9 @@ class Key(Base):
     key_name: Mapped[Optional[str]] = mapped_column(String(100))
     public_key: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     private_key_encrypted: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    encrypted_dek: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
+    private_key_nonce: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
+    encryption_version: Mapped[Optional[int]] = mapped_column(default=None)
     key_size: Mapped[int] = mapped_column(default=2048)
     algorithm: Mapped[SignatureAlgo] = mapped_column(
         Enum(SignatureAlgo, name="signature_algo", values_callable=enum_values),

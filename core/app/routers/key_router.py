@@ -47,3 +47,22 @@ async def revoke_key(
     if key_record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa.")
     return key_record
+
+
+@router.post("/{key_id}/rotate-encryption", response_model=KeyResponse)
+async def rotate_key_encryption(
+    key_id: int,
+    db: DatabaseDep,
+    current_user: TenantAdminDep,
+):
+    if current_user.tenant_id is None:
+        raise HTTPException(status_code=403, detail="Tenant role required.")
+    try:
+        key_record = await key_service.rotate_encryption(
+            db, key_id, current_user.tenant_id, current_user.id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if key_record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa.")
+    return key_record
