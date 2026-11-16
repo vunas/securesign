@@ -17,6 +17,6 @@
     "seed:core": "uv run --directory core python -m app.db.seed.seed_data --force"
   },
   "devDependencies": {
-    "concurrently": "^10.0.6"
+    "concurrently": "^10.0.7"
   }
 }
