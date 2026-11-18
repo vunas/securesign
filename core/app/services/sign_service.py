@@ -94,6 +94,7 @@ class SignService:
             payload={
                 "credential_id": credential.id,
                 "signer_name": sign_data.signer_name,
+                "operator_id": user_id,
             },
         )
 

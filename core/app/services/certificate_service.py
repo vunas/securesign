@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import (
     Encoding,
     load_pem_private_key,
@@ -172,14 +173,15 @@ class CertificateService:
             )
         )
 
+        is_ec = isinstance(user_public_key, ec.EllipticCurvePublicKey)
         if not is_ca and not is_tsa:
             cert_builder = cert_builder.add_extension(
                 x509.KeyUsage(
                     digital_signature=True,
                     content_commitment=True,
-                    key_encipherment=True,
+                    key_encipherment=not is_ec,
                     data_encipherment=False,
-                    key_agreement=False,
+                    key_agreement=is_ec,
                     key_cert_sign=False,
                     crl_sign=False,
                     encipher_only=False,

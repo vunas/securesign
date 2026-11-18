@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app.core.config import settings
-from app.core.dependencies import DatabaseDep
+from app.core.dependencies import CurrentUserDep, DatabaseDep
+from app.models.tenant import Tenant
 from app.services.auth_service import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     REFRESH_TOKEN_EXPIRE_DAYS,
@@ -48,11 +49,43 @@ async def login(
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
     )
 
+    tenant_name = None
+    if user.tenant_id is not None:
+        tenant = await db.get(Tenant, user.tenant_id)
+        if tenant:
+            tenant_name = tenant.name
+
     return {
         "message": "Đăng nhập thành công",
         "username": user.username,
+        "full_name": user.full_name,
         "role": user.role.value,
+        "tenant_id": user.tenant_id,
+        "tenant_name": tenant_name,
         "initial_api_credentials": initial_api_credentials,
+    }
+
+
+@router.get("/me")
+async def get_current_user_profile(
+    current_user: CurrentUserDep,
+    db: DatabaseDep,
+):
+    """Lấy thông tin profile người dùng hiện tại kèm vai trò và tên tổ chức."""
+    tenant_name = None
+    if current_user.tenant_id is not None:
+        tenant = await db.get(Tenant, current_user.tenant_id)
+        if tenant:
+            tenant_name = tenant.name
+
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "full_name": current_user.full_name,
+        "email": current_user.email,
+        "role": current_user.role.value,
+        "tenant_id": current_user.tenant_id,
+        "tenant_name": tenant_name,
     }
 
 

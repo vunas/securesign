@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -10,6 +11,20 @@ class KeyCreate(BaseModel):
     storage_type: KeyStorageType = KeyStorageType.SERVER
     key_size: int | None = None
     algorithm: SignatureAlgo = SignatureAlgo.RSA
+
+    @field_validator("algorithm", mode="before")
+    @classmethod
+    def normalize_algorithm(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            val_norm = value.strip().upper().replace("-", "_").replace(" ", "_")
+            if val_norm in ("ECDSA", "ECDSA_256", "EC", "SECP256R1", "P_256", "P256"):
+                return SignatureAlgo.ECDSA
+            if val_norm in ("RSA", "RSA_2048", "RSA_4096"):
+                return SignatureAlgo.RSA
+            for member in SignatureAlgo:
+                if member.value == val_norm or member.name == val_norm:
+                    return member
+        return value
 
     @field_validator("key_name", mode="before")
     @classmethod

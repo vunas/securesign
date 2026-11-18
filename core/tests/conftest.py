@@ -24,7 +24,12 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.core.dependencies import get_active_tenant_user, get_current_user, get_db
+from app.core.dependencies import (
+    get_active_tenant_user,
+    get_current_user,
+    get_db,
+    get_tenant_admin,
+)
 from app.db.base import Base
 from app.models.enums import CredentialStatus, UserRole
 
@@ -110,6 +115,8 @@ async def client_full(fastapi_app_full: FastAPI):
 
 @pytest.fixture()
 def override_current_user_full(fastapi_app_full: FastAPI):
+    from fastapi import HTTPException, status
+
     from app.models.user import User
 
     user = User(
@@ -117,15 +124,24 @@ def override_current_user_full(fastapi_app_full: FastAPI):
         username="test_enterprise_user",
         password_hash="hash",
         tenant_id=1,
-        role=UserRole.TENANT_OPERATOR,
+        role=UserRole.TENANT_ADMIN,
         is_active=True,
     )
 
     def _override() -> User:
         return user
 
+    def _override_tenant_admin() -> User:
+        if user.role != UserRole.TENANT_ADMIN:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Chỉ quản trị viên tổ chức được phép thực hiện thao tác này.",
+            )
+        return user
+
     fastapi_app_full.dependency_overrides[get_current_user] = _override
     fastapi_app_full.dependency_overrides[get_active_tenant_user] = _override
+    fastapi_app_full.dependency_overrides[get_tenant_admin] = _override_tenant_admin
     return user
 
 

@@ -59,3 +59,21 @@ async def test_generate_key_endpoint_uses_dependency_overrides(
     assert isinstance(data["key_fingerprint"], str)
     assert len(data["key_fingerprint"]) == 16
     assert data["key_fingerprint"].upper() == data["key_fingerprint"]
+
+
+@pytest.mark.integration
+async def test_generate_key_endpoint_forbidden_for_tenant_operator(
+    client_full, override_current_user_full
+):
+    from app.models.enums import UserRole
+
+    override_current_user_full.role = UserRole.TENANT_OPERATOR
+    payload = {
+        "key_name": "Operator Key Attempt",
+        "storage_type": "server",
+        "key_size": 2048,
+        "algorithm": "RSA",
+        "passphrase": None,
+    }
+    res = await client_full.post("/api/keys/", json=payload)
+    assert res.status_code == 403
