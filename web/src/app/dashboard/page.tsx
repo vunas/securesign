@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { fetchAPI, getCurrentUsername } from "@/lib/api";
@@ -61,50 +61,55 @@ interface DashboardData {
   signatures: SignatureItem[];
 }
 
+type DashboardSection = "overview" | "credentials" | "keys" | "audit";
+
+const emptySubscribe = () => () => {};
+
+function escapeHtml(str: string | null | undefined): string {
+  if (!str) return "";
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function extractDayLabel(signedAt: string): string {
+  const isoMatch = signedAt.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return `${isoMatch[3]}/${isoMatch[2]}`;
+  const vnMatch = signedAt.match(/^(\d{2})\/(\d{2})\/\d{4}/);
+  if (vnMatch) return `${vnMatch[1]}/${vnMatch[2]}`;
+  return signedAt.slice(0, 10);
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeSection, setActiveSection] =
+    useState<DashboardSection>("overview");
 
-  const revokeCredential = async (credential: CredentialItem) => {
-    const password = window.prompt("Nhập mật khẩu tài khoản để xác nhận thu hồi:");
-    if (!password) return;
-    const reason = window.prompt("Nhập lý do thu hồi:");
-    if (!reason?.trim()) return;
+  // Search & filter states
+  const [credSearch, setCredSearch] = useState("");
+  const [credStatusFilter, setCredStatusFilter] = useState<
+    "ALL" | "ISSUED" | "REVOKED"
+  >("ALL");
+  const [sigSearch, setSigSearch] = useState("");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
-    try {
-      const response = await fetch(`/api/credentials/${credential.id}/revoke`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password, reason: reason.trim() }),
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        const detail = result.detail;
-        throw new Error(
-          typeof detail === "string" ? detail : detail?.message || "Không thể thu hồi văn bằng.",
-        );
-      }
-      const refreshed = await fetchAPI<DashboardData>("/dashboard-api/summary");
-      setData(refreshed);
-      showToast("Đã thu hồi văn bằng", "success");
-    } catch (error: unknown) {
-      showToast(error instanceof Error ? error.message : "Không thể thu hồi văn bằng.", "error");
-    }
-  };
+  // Revoke credential modal states
+  const [revokeTarget, setRevokeTarget] = useState<CredentialItem | null>(null);
+  const [revokeReason, setRevokeReason] = useState("");
+  const [revokePassword, setRevokePassword] = useState("");
+  const [revokeError, setRevokeError] = useState("");
+  const [revoking, setRevoking] = useState(false);
 
-  const revokeKey = async (key: KeyItem) => {
-    if (!window.confirm(`Thu hồi khóa "${key.name}" và chứng thư liên kết?`)) return;
-    try {
-      await fetchAPI(`/api/keys/${key.id}/revoke`, "POST");
-      const refreshed = await fetchAPI<DashboardData>("/dashboard-api/summary");
-      setData(refreshed);
-      showToast("Khóa và chứng thư đã được thu hồi.", "success");
-    } catch (error: unknown) {
-      showToast(error instanceof Error ? error.message : "Không thể thu hồi khóa.", "error");
-    }
-  };
+  const username = useSyncExternalStore(
+    emptySubscribe,
+    () => getCurrentUsername() || "",
+    () => "",
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -132,6 +137,112 @@ export default function DashboardPage() {
     };
   }, [router]);
 
+  const copyToClipboard = (text: string, tag: string) => {
+    void navigator.clipboard?.writeText(text);
+    setCopiedId(tag);
+    showToast("Đã sao chép vào bộ nhớ tạm", "success");
+    window.setTimeout(() => {
+      setCopiedId((prev) => (prev === tag ? null : prev));
+    }, 1800);
+  };
+
+  const openRevokeModal = (credential: CredentialItem) => {
+    setRevokeTarget(credential);
+    setRevokeReason("");
+    setRevokePassword("");
+    setRevokeError("");
+  };
+
+  const closeRevokeModal = () => {
+    if (revoking) return;
+    setRevokeTarget(null);
+    setRevokeReason("");
+    setRevokePassword("");
+    setRevokeError("");
+  };
+
+  const handleRevokeSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!revokeTarget) return;
+
+    const trimmedReason = revokeReason.trim();
+    if (!trimmedReason || !revokePassword) {
+      setRevokeError("Vui lòng nhập đầy đủ lý do và mật khẩu xác nhận.");
+      return;
+    }
+
+    setRevoking(true);
+    setRevokeError("");
+
+    try {
+      const response = await fetch(
+        `/api/credentials/${revokeTarget.id}/revoke`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            password: revokePassword,
+            reason: trimmedReason,
+          }),
+        },
+      );
+      const result = await response.json();
+      if (!response.ok) {
+        const detail = result.detail;
+        throw new Error(
+          typeof detail === "string"
+            ? detail
+            : detail?.message || "Không thể thu hồi văn bằng.",
+        );
+      }
+      const refreshed = await fetchAPI<DashboardData>("/dashboard-api/summary");
+      setData(refreshed);
+      setRevokeTarget(null);
+      setRevokeReason("");
+      setRevokePassword("");
+      showToast("Đã thu hồi văn bằng", "success");
+    } catch (error: unknown) {
+      setRevokeError(
+        error instanceof Error ? error.message : "Không thể thu hồi văn bằng.",
+      );
+    } finally {
+      setRevoking(false);
+    }
+  };
+
+  const revokeKey = async (key: KeyItem) => {
+    const Swal = getSwal();
+    if (Swal) {
+      const confirmResult = await Swal.fire({
+        icon: "warning",
+        title: "Thu hồi khóa ký số?",
+        html: `<p class="text-sm text-slate-600">Khóa <b class="text-slate-900">${escapeHtml(key.name)}</b> và chứng thư X.509 liên kết sẽ ngừng hoạt động ngay lập tức.</p>`,
+        showCancelButton: true,
+        confirmButtonText: "Thu hồi khóa",
+        cancelButtonText: "Hủy",
+        confirmButtonColor: "#e11d48",
+      });
+      if (!confirmResult.isConfirmed) return;
+    } else if (
+      !window.confirm(`Thu hồi khóa "${key.name}" và chứng thư liên kết?`)
+    ) {
+      return;
+    }
+
+    try {
+      await fetchAPI(`/api/keys/${key.id}/revoke`, "POST");
+      const refreshed = await fetchAPI<DashboardData>("/dashboard-api/summary");
+      setData(refreshed);
+      showToast("Khóa và chứng thư đã được thu hồi.", "success");
+    } catch (error: unknown) {
+      showToast(
+        error instanceof Error ? error.message : "Không thể thu hồi khóa.",
+        "error",
+      );
+    }
+  };
+
   const downloadPubKey = (key: KeyItem) => {
     const blob = new Blob([key.public_key], { type: "text/plain" });
     const url = window.URL.createObjectURL(blob);
@@ -150,456 +261,1122 @@ export default function DashboardPage() {
     if (Swal) {
       Swal.fire({
         title:
-          '<span class="text-xl font-bold text-slate-800"><i class="fa-solid fa-key text-indigo-500 mr-2"></i>Khóa Công Khai (Public Key)</span>',
-        html: `<div class="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-4">
-                <textarea readonly class="w-full h-56 p-3 text-xs font-mono bg-transparent border-0 resize-none outline-none text-slate-700 leading-relaxed">${key.public_key}</textarea>
+          '<span class="text-lg font-bold text-slate-900"><i class="fa-solid fa-key text-indigo-600 mr-2"></i>Khóa Công Khai (Public Key)</span>',
+        html: `<div class="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <textarea readonly class="h-56 w-full resize-none border-0 bg-transparent p-2 font-mono text-xs leading-relaxed text-slate-700 outline-none">${escapeHtml(key.public_key)}</textarea>
                </div>
-               <p class="text-xs text-slate-500 mt-3 text-left"><i class="fa-solid fa-circle-info text-blue-500 mr-1"></i> Public Key này được nhúng công khai vào PDF để đối tác xác thực chữ ký của bạn.</p>`,
+               <p class="mt-3 text-left text-xs text-slate-500"><i class="fa-solid fa-circle-info text-indigo-600 mr-1"></i> Public Key này được nhúng công khai vào PDF để đối tác xác thực chữ ký của tổ chức.</p>`,
         width: 650,
         confirmButtonText: "Đóng",
-        confirmButtonColor: "#3b82f6",
-        customClass: {
-          confirmButton: "rounded-xl font-bold px-6 py-2.5",
-        },
+        confirmButtonColor: "#4f46e5",
       });
     } else {
       alert(key.public_key);
     }
   };
 
-  function escapeHtml(str: string | null | undefined): string {
-    if (!str) return "";
-    return str
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-  }
-
   const viewSignatureDetails = (sig: SignatureItem) => {
     const Swal = getSwal();
     if (Swal) {
       Swal.fire({
         title:
-          '<span class="text-xl font-bold text-slate-800"><i class="fa-solid fa-file-shield text-blue-500 mr-2"></i>Chi Tiết Chữ Ký Số</span>',
-        html: `<div class="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-4 text-left space-y-2 text-xs">
-              <div><b>Tài liệu:</b> ${escapeHtml(sig.credential_name)}</div>
-              <div><b>Người ký:</b> ${escapeHtml(sig.signer)}</div>
-              <div><b>Khóa sử dụng:</b> ${escapeHtml(sig.key_name)}</div>
-              <div><b>Thuật toán:</b> ${escapeHtml(sig.algorithm)}</div>
-              <div><b>Thời gian:</b> ${escapeHtml(sig.signed_at)}</div>
-              <div class="pt-2 border-t border-slate-200 font-mono text-[10px] break-all"><b>Giá trị chữ ký (Base64):</b><br/>${escapeHtml(sig.signature_base64.substring(0, 80))}...</div>
+          '<span class="text-lg font-bold text-slate-900"><i class="fa-solid fa-file-shield text-indigo-600 mr-2"></i>Chi Tiết Chữ Ký Số</span>',
+        html: `<div class="mt-3 space-y-2.5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-left text-xs">
+              <div><span class="text-slate-500">Tài liệu:</span> <b class="text-slate-900">${escapeHtml(sig.credential_name)}</b></div>
+              <div><span class="text-slate-500">Người đại diện ký:</span> <b class="text-slate-900">${escapeHtml(sig.signer)}</b></div>
+              <div><span class="text-slate-500">Khóa sử dụng:</span> <b class="text-slate-900">${escapeHtml(sig.key_name)}</b></div>
+              <div><span class="text-slate-500">Thuật toán:</span> <b class="font-mono text-indigo-700">${escapeHtml(sig.algorithm)}</b></div>
+              <div><span class="text-slate-500">Thời gian (TSA):</span> <b class="text-slate-900">${escapeHtml(sig.signed_at)}</b></div>
+              <div class="border-t border-slate-200 pt-2.5 font-mono text-[10px] break-all text-slate-600">
+                <b class="text-slate-800">Giá trị chữ ký (Base64):</b><br/>${escapeHtml(sig.signature_base64.substring(0, 96))}...
+              </div>
              </div>
-             <p class="text-xs text-slate-500 mt-3 text-left"><i class="fa-solid fa-shield-check text-emerald-500 mr-1"></i>              Tệp PDF đã ký được tải trực tiếp về thiết bị của người phát hành.</p>`,
+             <p class="mt-3 text-left text-xs text-slate-500"><i class="fa-solid fa-shield-check text-emerald-600 mr-1"></i> Tệp PDF đã ký được trả trực tiếp về thiết bị của người phát hành theo kiến trúc Stateless.</p>`,
         width: 600,
         confirmButtonText: "Đóng",
-        confirmButtonColor: "#3b82f6",
+        confirmButtonColor: "#4f46e5",
       });
     }
   };
 
+  // Analytics derived from existing DashboardData
+  const signingChartData = useMemo(() => {
+    const sigs = data?.signatures ?? [];
+    if (!sigs.length) return [];
+    const counts = new Map<string, number>();
+    [...sigs].reverse().forEach((s) => {
+      const day = extractDayLabel(s.signed_at);
+      counts.set(day, (counts.get(day) ?? 0) + 1);
+    });
+    const entries = Array.from(counts.entries()).slice(-7);
+    const maxVal = Math.max(...entries.map(([, c]) => c), 1);
+    return entries.map(([label, count]) => ({
+      label,
+      count,
+      heightPercent: Math.max(14, Math.round((count / maxVal) * 100)),
+    }));
+  }, [data?.signatures]);
+
+  const credentialBreakdown = useMemo(() => {
+    const list = data?.credentials ?? [];
+    const total = list.length;
+    const issued = list.filter((c) => c.status === "ISSUED").length;
+    const revoked = list.filter((c) => c.status === "REVOKED").length;
+    const draft = list.filter((c) => c.status === "DRAFT").length;
+    const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
+    return {
+      total,
+      issued,
+      revoked,
+      draft,
+      issuedPct: pct(issued),
+      revokedPct: pct(revoked),
+      draftPct: pct(draft),
+    };
+  }, [data?.credentials]);
+
+  const quotaLimit = data?.stats.monthly_signing_limit ?? 0;
+  const quotaUsed = data?.stats.monthly_signing_used ?? 0;
+  const quotaPercent =
+    quotaLimit > 0
+      ? Math.min(100, Math.round((quotaUsed / quotaLimit) * 100))
+      : 0;
+
+  const filteredCredentials = (data?.credentials ?? []).filter((cred) => {
+    const matchesStatus =
+      credStatusFilter === "ALL" || cred.status === credStatusFilter;
+    const q = credSearch.trim().toLowerCase();
+    const matchesQuery =
+      !q ||
+      cred.recipient_name.toLowerCase().includes(q) ||
+      cred.tracking_id.toLowerCase().includes(q) ||
+      (cred.credential_number ?? "").toLowerCase().includes(q) ||
+      (cred.name ?? "").toLowerCase().includes(q);
+    return matchesStatus && matchesQuery;
+  });
+
+  const filteredSignatures = (data?.signatures ?? []).filter((sig) => {
+    const q = sigSearch.trim().toLowerCase();
+    return (
+      !q ||
+      sig.credential_name.toLowerCase().includes(q) ||
+      sig.signer.toLowerCase().includes(q) ||
+      sig.key_name.toLowerCase().includes(q)
+    );
+  });
+
+  const navItems: {
+    id: DashboardSection;
+    label: string;
+    icon: string;
+    count?: number;
+  }[] = [
+    { id: "overview", label: "Tổng quan", icon: "fa-chart-pie" },
+    {
+      id: "credentials",
+      label: "Văn bằng đã phát hành",
+      icon: "fa-file",
+      count: data?.stats.total_credentials,
+    },
+    {
+      id: "keys",
+      label: "Khóa & Chứng thư",
+      icon: "fa-key",
+      count: data?.stats.total_keys,
+    },
+    {
+      id: "audit",
+      label: "Nhật ký kiểm toán",
+      icon: "fa-clock-rotate-left",
+      count: data?.stats.total_sigs,
+    },
+  ];
+
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="flex min-h-screen flex-col bg-slate-50/80">
       <Navbar />
 
-      <main className="grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 overflow-hidden">
-        <div className="max-w-7xl mx-auto space-y-8">
-          {/* KHỐI 1: SUMMARY THỐNG KÊ */}
-          <div>
-            <div className="flex items-center mb-6">
-              <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">
-                <i className="fa-solid fa-chart-pie text-blue-600 mr-3"></i>Tổng
-                quan tổ chức
-              </h2>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-              {/* Thẻ 1 */}
-              <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6 flex items-center transform transition duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-slate-200/50">
-                <div className="w-16 h-16 bg-linear-to-br from-indigo-100 to-blue-100 rounded-2xl flex items-center justify-center shadow-inner">
-                  <i className="fa-solid fa-key text-2xl text-indigo-600"></i>
-                </div>
-                <div className="ml-5">
-                  <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                    Khóa & Chứng Chỉ
-                  </p>
-                  <p className="text-4xl font-extrabold text-slate-800">
-                    {loading ? "..." : (data?.stats.total_keys ?? 0)}
-                  </p>
-                </div>
-              </div>
-
-              {/* Thẻ 2 */}
-              <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6 flex items-center transform transition duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-slate-200/50">
-                <div className="w-16 h-16 bg-linear-to-br from-emerald-100 to-teal-100 rounded-2xl flex items-center justify-center shadow-inner">
-                  <i className="fa-solid fa-file-pdf text-2xl text-emerald-600"></i>
-                </div>
-                <div className="ml-5">
-                  <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                    Tài Liệu / Credentials
-                  </p>
-                  <p className="text-4xl font-extrabold text-slate-800">
-                    {loading ? "..." : (data?.stats.total_credentials ?? 0)}
-                  </p>
-                </div>
-              </div>
-
-              {/* Thẻ 3 */}
-              <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6 flex items-center transform transition duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-slate-200/50">
-                <div className="w-16 h-16 bg-linear-to-br from-blue-100 to-cyan-100 rounded-2xl flex items-center justify-center shadow-inner">
-                  <i className="fa-solid fa-signature text-2xl text-blue-600"></i>
-                </div>
-                <div className="ml-5">
-                  <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                    Lượt Ký Thành Công
-                  </p>
-                  <p className="text-4xl font-extrabold text-slate-800">
-                    {loading ? "..." : (data?.stats.total_sigs ?? 0)}
-                  </p>
-                </div>
-              </div>
-              <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6 flex items-center">
-                <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center">
-                  <i className="fa-solid fa-gauge-high text-2xl text-amber-600"></i>
-                </div>
-                <div className="ml-5">
-                  <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                    Hạn ngạch ký tháng này
-                  </p>
-                  <p className="text-2xl font-extrabold text-slate-800">
-                    {loading
-                      ? "..."
-                      : `${data?.stats.monthly_signing_used ?? 0} / ${data?.stats.monthly_signing_limit ?? 0}`}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* KHỐI 2: QUẢN LÝ KHÓA (KEYS) */}
-          <div className="bg-white shadow-xl shadow-slate-200/40 rounded-2xl border border-slate-100 overflow-hidden mb-8">
-            <div className="bg-slate-50/80 px-6 py-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
-              <div className="flex items-center">
-                <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center mr-3 shadow-inner">
-                  <i className="fa-solid fa-key text-lg"></i>
-                </div>
-                <h3 className="text-lg font-bold text-slate-800">
-                  Danh sách khóa ký
-                </h3>
-              </div>
-              <Link
-                href="/generate-key"
-                className="w-full sm:w-auto flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-semibold shadow-md shadow-indigo-500/30 transition-all transform hover:-translate-y-0.5 text-sm"
+      {/* Full-width Main Container matching Navbar horizontal padding */}
+      <main className="w-full grow px-4 py-6 sm:px-6 lg:px-8">
+        {/* Mobile Section Switcher (< lg) */}
+        <div className="mb-5 flex gap-2 overflow-x-auto pb-1 lg:hidden">
+          {navItems.map((item) => {
+            const active = activeSection === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActiveSection(item.id)}
+                className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-semibold transition cursor-pointer ${
+                  active
+                    ? "border-indigo-600 bg-indigo-600 text-white"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                }`}
               >
-                <i className="fa-solid fa-plus mr-2"></i> Khởi Tạo Khóa Mới
-              </Link>
+                <i className={`fa-solid ${item.icon}`}></i>
+                <span>{item.label}</span>
+                {typeof item.count === "number" && (
+                  <span
+                    className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+                      active
+                        ? "bg-white/20 text-white"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {item.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Full-bleed 2-Column Workspace Layout */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start">
+          {/* LEFT SIDEBAR (Aligned from top) */}
+          <aside className="hidden space-y-5 lg:sticky lg:top-20 lg:col-span-3 xl:col-span-2 lg:block">
+            <nav className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-2.5 shadow-sm">
+              <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Danh mục quản lý
+              </div>
+              <div className="space-y-1">
+                {navItems.map((item) => {
+                  const active = activeSection === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setActiveSection(item.id)}
+                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-semibold transition cursor-pointer ${
+                        active
+                          ? "bg-indigo-50 text-indigo-700"
+                          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2.5 truncate">
+                        <i
+                          className={`fa-solid ${item.icon} w-4 shrink-0 text-center ${
+                            active ? "text-indigo-600" : "text-slate-400"
+                          }`}
+                        ></i>
+                        <span className="truncate">{item.label}</span>
+                      </span>
+                      {typeof item.count === "number" && (
+                        <span
+                          className={`ml-1.5 shrink-0 rounded-md px-2 py-0.5 font-mono text-[11px] ${
+                            active
+                              ? "bg-indigo-100 text-indigo-700"
+                              : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          {item.count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
               {data?.permissions.can_manage_api_keys && (
-                <Link
-                  href="/api-keys"
-                  className="w-full sm:w-auto flex items-center justify-center rounded-xl border border-indigo-200 bg-white px-5 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-50"
-                >
-                  Quản lý API key
-                </Link>
+                <>
+                  <div className="my-2.5 border-t border-slate-100" />
+                  <div className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Quản trị mở rộng
+                  </div>
+                  <div className="space-y-1">
+                    <Link
+                      href="/api-keys"
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <i className="fa-solid fa-plug w-4 text-center text-slate-400"></i>
+                        API Keys
+                      </span>
+                      <i className="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-400"></i>
+                    </Link>
+                    <Link
+                      href="/team"
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <i className="fa-solid fa-users w-4 text-center text-slate-400"></i>
+                        Nhân sự
+                      </span>
+                      <i className="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-400"></i>
+                    </Link>
+                  </div>
+                </>
+              )}
+            </nav>
+
+            {/* Monthly Quota Card */}
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-800">
+                  Hạn ngạch tháng
+                </span>
+                <span className="font-mono font-semibold text-indigo-600">
+                  {loading ? "..." : `${quotaPercent}%`}
+                </span>
+              </div>
+              <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    quotaPercent >= 90 ? "bg-amber-500" : "bg-indigo-600"
+                  }`}
+                  style={{ width: `${quotaPercent}%` }}
+                />
+              </div>
+              <div className="mt-2.5 flex items-center justify-between text-xs text-slate-600">
+                <span>Đã dùng</span>
+                <span className="font-semibold text-slate-900">
+                  {loading ? "..." : `${quotaUsed} / ${quotaLimit}`}
+                </span>
+              </div>
+              {data?.stats.period_start && data?.stats.period_end && (
+                <p className="mt-2 border-t border-slate-100 pt-2 text-[11px] leading-relaxed text-slate-400">
+                  {data.stats.period_start} → {data.stats.period_end}
+                </p>
               )}
             </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      Tên Khóa / Hệ Mật
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      Môi Trường Lưu Trữ
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      Ngày Khởi Tạo
-                    </th>
-                    <th className="px-6 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      Công Cụ
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-slate-100">
-                  {loading ? (
-                    <tr>
-                      <td
-                        colSpan={4}
-                        className="px-6 py-10 text-center text-slate-400 font-medium"
-                      >
-                        <i className="fa-solid fa-circle-notch fa-spin text-2xl mr-2 text-indigo-500"></i>{" "}
-                        Đang tải danh sách khóa...
-                      </td>
-                    </tr>
-                  ) : !data?.keys || data.keys.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={4}
-                        className="px-6 py-10 text-center text-slate-400 font-medium"
-                      >
-                        Bạn chưa khởi tạo khóa RSA nào.
-                      </td>
-                    </tr>
-                  ) : (
-                    data.keys.map((k) => (
-                      <tr
-                        key={k.id}
-                        className="hover:bg-slate-50/50 transition-colors"
-                      >
-                        <td className="px-6 py-5 whitespace-nowrap">
-                          <div className="font-bold text-slate-800 text-sm mb-1">
-                            {k.name}
-                          </div>
-                          <div className="text-xs text-slate-500 font-medium bg-slate-100 inline-block px-2 py-0.5 rounded">
-                            {k.algorithm} · {k.key_fingerprint}
-                          </div>
-                          {k.is_revoked && (
-                            <span className="ml-2 text-xs font-bold text-red-700">Đã thu hồi</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-5 whitespace-nowrap">
-                          <span className="px-2.5 py-1 inline-flex text-xs leading-5 font-bold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
-                            <i className="fa-solid fa-cloud mr-1.5 mt-0.5"></i>{" "}
-                            Lưu máy chủ
-                          </span>
-                        </td>
-                        <td className="px-6 py-5 whitespace-nowrap text-sm font-medium text-slate-500">
-                          {k.created_at}
-                        </td>
-                        <td className="px-6 py-5 whitespace-nowrap text-right space-x-2">
-                          <button
-                            onClick={() => viewPubKey(k)}
-                            className="inline-flex items-center justify-center px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-indigo-600 rounded-lg text-xs font-semibold shadow-sm transition-colors cursor-pointer"
-                            title="Xem chuỗi Khóa công khai"
-                          >
-                            <i className="fa-solid fa-eye mr-1.5"></i> Xem
-                          </button>
-                          <button
-                            onClick={() => downloadPubKey(k)}
-                            className="inline-flex items-center justify-center px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-emerald-600 rounded-lg text-xs font-semibold shadow-sm transition-colors cursor-pointer"
-                            title="Tải file .pem Khóa Công Khai"
-                          >
-                            <i className="fa-solid fa-download mr-1.5"></i> Tải
-                            Pub
-                          </button>
-                          {!k.is_revoked && data?.permissions.can_revoke_credentials && (
-                            <button
-                              onClick={() => void revokeKey(k)}
-                              className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700"
-                            >
-                              Thu hồi
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          </aside>
 
-          {/* KHỐI 3: QUẢN LÝ TÀI LIỆU / CREDENTIALS */}
-          <div className="bg-white shadow-xl shadow-slate-200/40 rounded-2xl border border-slate-100 overflow-hidden mb-8">
-            <div className="bg-slate-50/80 px-6 py-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
-              <div className="flex items-center">
-                <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-lg flex items-center justify-center mr-3 shadow-inner">
-                  <i className="fa-solid fa-folder-open text-lg"></i>
+          {/* RIGHT MAIN DASHBOARD WORKSPACE DIV */}
+          <div className="space-y-6 lg:col-span-9 xl:col-span-10">
+            {/* INTEGRATED WORKSPACE HEADER CARD */}
+            <div className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:p-6">
+              <div>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+                    Không gian quản trị tổ chức
+                  </h1>
+                  {username && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50/80 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                      {username}
+                    </span>
+                  )}
                 </div>
-                <h3 className="text-lg font-bold text-slate-800">Văn bằng đã phát hành</h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  Theo dõi hạn ngạch ký số, quản lý danh sách văn bằng đã bảo
+                  chứng và lịch sử kiểm toán.
+                </p>
               </div>
-              <Link
-                href="/sign"
-                className="w-full sm:w-auto flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-semibold shadow-md shadow-emerald-500/30 transition-all transform hover:-translate-y-0.5 text-sm"
-              >
-                <i className="fa-solid fa-file-circle-plus mr-2"></i> Phát hành văn bằng
-              </Link>
+
+              <div className="flex shrink-0 flex-wrap items-center gap-2.5">
+                <Link
+                  href="/sign"
+                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm shadow-indigo-200 transition hover:bg-indigo-700"
+                >
+                  <i className="fa-solid fa-pen-nib"></i>
+                  Phát hành văn bằng
+                </Link>
+                <Link
+                  href="/generate-key"
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                >
+                  <i className="fa-solid fa-plus text-indigo-600"></i>
+                  Khởi tạo khóa
+                </Link>
+              </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      Văn bằng / Người nhận
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      Mã tra cứu
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      Trạng thái
-                    </th>
-                    <th className="px-6 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      Thao tác
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-slate-100">
-                  {loading ? (
-                    <tr>
-                      <td
-                        colSpan={4}
-                        className="px-6 py-10 text-center text-slate-400 font-medium"
-                      >
-                        <i className="fa-solid fa-circle-notch fa-spin text-2xl mr-2 text-emerald-500"></i>{" "}
-                        Đang tải kho tài liệu...
-                      </td>
-                    </tr>
-                  ) : !data?.credentials || data.credentials.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={4}
-                        className="px-6 py-10 text-center text-slate-400 font-medium"
-                      >
-                        Chưa có tài liệu nào trong hệ thống.
-                      </td>
-                    </tr>
-                  ) : (
-                    data.credentials.map((cred) => (
-                      <tr
-                        key={cred.id}
-                        className="hover:bg-slate-50/50 transition-colors group"
-                      >
-                        <td className="px-6 py-5 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <i className="fa-solid fa-file-pdf text-2xl text-red-400 mr-4 opacity-80 group-hover:opacity-100 transition-opacity"></i>
-                            <div>
-                              <div className="font-bold text-slate-800 text-sm">
-                                {cred.credential_number || cred.name || "Văn bằng"}
-                              </div>
-                              <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                                {cred.recipient_name}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-5 whitespace-nowrap text-sm font-mono text-slate-500">
-                          <Link
-                            href={`/verify/${encodeURIComponent(cred.tracking_id)}`}
-                            className="font-semibold text-blue-700 hover:underline"
+
+            {/* KPI SUMMARY CARDS + VISUAL CHARTS (OVERVIEW) */}
+            {activeSection === "overview" && (
+              <>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  <button
+                    type="button"
+                    onClick={() => setActiveSection("keys")}
+                    className="flex items-center gap-4 rounded-2xl border border-slate-200/90 bg-white p-5 text-left shadow-sm transition hover:border-indigo-300 cursor-pointer"
+                  >
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                      <i className="fa-solid fa-key text-lg"></i>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500">
+                        Khóa & Chứng thư
+                      </p>
+                      <p className="mt-0.5 text-2xl font-extrabold text-slate-900">
+                        {loading ? "..." : (data?.stats.total_keys ?? 0)}
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveSection("credentials")}
+                    className="flex items-center gap-4 rounded-2xl border border-slate-200/90 bg-white p-5 text-left shadow-sm transition hover:border-emerald-300 cursor-pointer"
+                  >
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                      <i className="fa-solid fa-file-pdf text-lg"></i>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500">
+                        Văn bằng phát hành
+                      </p>
+                      <p className="mt-0.5 text-2xl font-extrabold text-slate-900">
+                        {loading ? "..." : (data?.stats.total_credentials ?? 0)}
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveSection("audit")}
+                    className="flex items-center gap-4 rounded-2xl border border-slate-200/90 bg-white p-5 text-left shadow-sm transition hover:border-blue-300 cursor-pointer"
+                  >
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                      <i className="fa-solid fa-signature text-lg"></i>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500">
+                        Lượt ký thành công
+                      </p>
+                      <p className="mt-0.5 text-2xl font-extrabold text-slate-900">
+                        {loading ? "..." : (data?.stats.total_sigs ?? 0)}
+                      </p>
+                    </div>
+                  </button>
+
+                  <div className="flex items-center gap-4 rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                      <i className="fa-solid fa-gauge-high text-lg"></i>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500">
+                        Hạn ngạch tháng
+                      </p>
+                      <p className="mt-0.5 text-xl font-extrabold text-slate-900">
+                        {loading ? "..." : `${quotaUsed} / ${quotaLimit}`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* VISUAL ANALYTICS CHARTS ROW */}
+                <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
+                  {/* Chart 1: Signing Frequency by Day */}
+                  <div className="flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm xl:col-span-7">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900">
+                          Tần suất ký phát hành gần đây
+                        </h3>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          Số lượt ký số hoàn tất theo từng ngày hoạt động
+                        </p>
+                      </div>
+                      <span className="rounded-lg bg-indigo-50 px-2.5 py-1 font-mono text-xs font-semibold text-indigo-700">
+                        Tổng: {data?.stats.total_sigs ?? 0} lượt
+                      </span>
+                    </div>
+
+                    {loading ? (
+                      <div className="flex h-44 items-center justify-center text-xs text-slate-400">
+                        Đang tổng hợp biểu đồ...
+                      </div>
+                    ) : signingChartData.length === 0 ? (
+                      <div className="mt-4 flex h-40 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60 text-xs text-slate-400">
+                        <i className="fa-solid fa-chart-column mb-2 text-lg text-slate-300"></i>
+                        Chưa có dữ liệu ký số để hiển thị biểu đồ
+                      </div>
+                    ) : (
+                      <div className="mt-6 grid h-44 grid-cols-7 items-end gap-3 border-b border-slate-100 pb-3 pt-4">
+                        {signingChartData.map((bar) => (
+                          <div
+                            key={bar.label}
+                            className="flex h-full flex-col items-center justify-end gap-2 group"
                           >
-                            {cred.tracking_id}
-                          </Link>
-                        </td>
-                        <td className="px-6 py-5 whitespace-nowrap text-sm">
-                          <span className={cred.status === "REVOKED" ? "font-bold text-red-700" : "font-bold text-emerald-700"}>
-                            {cred.status === "REVOKED" ? "Đã thu hồi" : cred.status === "ISSUED" ? "Đã phát hành" : "Bản nháp"}
-                          </span>
-                        </td>
-                        <td className="px-6 py-5 whitespace-nowrap text-right">
-                          <div className="flex items-center justify-end space-x-2">
-                            {cred.status === "ISSUED" &&
-                              data.permissions.can_revoke_credentials && (
+                            <span className="font-mono text-[11px] font-bold text-slate-700">
+                              {bar.count}
+                            </span>
+                            <div className="flex w-full max-w-9.5 flex-1 items-end rounded-t-lg bg-slate-100/80 p-0.5">
+                              <div
+                                className="w-full rounded-t-md bg-linear-to-t from-indigo-600 to-blue-500 transition-all duration-500 group-hover:from-indigo-700 group-hover:to-blue-600"
+                                style={{ height: `${bar.heightPercent}%` }}
+                                title={`${bar.label}: ${bar.count} lượt ký`}
+                              />
+                            </div>
+                            <span className="font-mono text-[11px] font-medium text-slate-500">
+                              {bar.label}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Chart 2: Credential Lifecycle Distribution */}
+                  <div className="flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm xl:col-span-5">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900">
+                        Tình trạng hiệu lực văn bằng
+                      </h3>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        Phân bổ trạng thái xác thực trên cổng tra cứu
+                      </p>
+                    </div>
+
+                    {/* Stacked Horizontal Bar */}
+                    <div className="my-5">
+                      <div className="flex h-3.5 w-full overflow-hidden rounded-full bg-slate-100">
+                        {credentialBreakdown.issuedPct > 0 && (
+                          <div
+                            className="bg-emerald-500 transition-all"
+                            style={{
+                              width: `${credentialBreakdown.issuedPct}%`,
+                            }}
+                            title={`Đã phát hành: ${credentialBreakdown.issued}`}
+                          />
+                        )}
+                        {credentialBreakdown.revokedPct > 0 && (
+                          <div
+                            className="bg-rose-500 transition-all"
+                            style={{
+                              width: `${credentialBreakdown.revokedPct}%`,
+                            }}
+                            title={`Đã thu hồi: ${credentialBreakdown.revoked}`}
+                          />
+                        )}
+                        {credentialBreakdown.draftPct > 0 && (
+                          <div
+                            className="bg-slate-400 transition-all"
+                            style={{
+                              width: `${credentialBreakdown.draftPct}%`,
+                            }}
+                            title={`Bản nháp: ${credentialBreakdown.draft}`}
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-2 font-medium text-slate-700">
+                          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+                          Đang có hiệu lực (Issued)
+                        </span>
+                        <span className="font-mono font-bold text-slate-900">
+                          {credentialBreakdown.issued} (
+                          {credentialBreakdown.issuedPct}%)
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-2 font-medium text-slate-700">
+                          <span className="h-2.5 w-2.5 rounded-full bg-rose-500"></span>
+                          Đã thu hồi (Revoked)
+                        </span>
+                        <span className="font-mono font-bold text-slate-900">
+                          {credentialBreakdown.revoked} (
+                          {credentialBreakdown.revokedPct}%)
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-2 font-medium text-slate-700">
+                          <span className="h-2.5 w-2.5 rounded-full bg-slate-400"></span>
+                          Bản nháp (Draft)
+                        </span>
+                        <span className="font-mono font-bold text-slate-900">
+                          {credentialBreakdown.draft} (
+                          {credentialBreakdown.draftPct}%)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* SECTION: VĂN BẰNG ĐÃ PHÁT HÀNH */}
+            {(activeSection === "overview" ||
+              activeSection === "credentials") && (
+              <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm">
+                <div className="flex flex-col justify-between gap-3 border-b border-slate-100 bg-slate-50/60 px-6 py-4 sm:flex-row sm:items-center">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100/80 text-emerald-700">
+                      <i className="fa-solid fa-folder-open text-sm"></i>
+                    </div>
+                    <div>
+                      <h2 className="text-base font-bold text-slate-900">
+                        {activeSection === "overview"
+                          ? "Văn bằng phát hành gần đây"
+                          : "Danh sách văn bằng đã phát hành"}
+                      </h2>
+                      <p className="text-xs text-slate-500">
+                        Tra cứu mã xác thực công khai hoặc thu hồi hiệu lực văn
+                        bằng
+                      </p>
+                    </div>
+                  </div>
+
+                  {activeSection === "overview" ? (
+                    <button
+                      type="button"
+                      onClick={() => setActiveSection("credentials")}
+                      className="self-start text-xs font-semibold text-indigo-600 hover:text-indigo-800 sm:self-auto cursor-pointer"
+                    >
+                      Xem tất cả ({data?.credentials.length ?? 0}) →
+                    </button>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="text"
+                        value={credSearch}
+                        onChange={(e) => setCredSearch(e.target.value)}
+                        placeholder="Tìm người nhận, số hiệu, mã..."
+                        className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none"
+                      />
+                      <select
+                        value={credStatusFilter}
+                        onChange={(e) =>
+                          setCredStatusFilter(
+                            e.target.value as "ALL" | "ISSUED" | "REVOKED",
+                          )
+                        }
+                        className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 focus:border-indigo-500 focus:outline-none"
+                      >
+                        <option value="ALL">Tất cả trạng thái</option>
+                        <option value="ISSUED">Đã phát hành</option>
+                        <option value="REVOKED">Đã thu hồi</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-slate-200">
+                    <thead className="bg-slate-50/70">
+                      <tr>
+                        <th className="px-6 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Văn bằng / Người nhận
+                        </th>
+                        <th className="px-6 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Mã tra cứu
+                        </th>
+                        <th className="px-6 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Trạng thái
+                        </th>
+                        <th className="px-6 py-3.5 text-right text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Thao tác
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {loading ? (
+                        <tr>
+                          <td
+                            colSpan={4}
+                            className="px-6 py-10 text-center text-sm text-slate-400"
+                          >
+                            <i className="fa-solid fa-circle-notch fa-spin mr-2 text-indigo-600"></i>
+                            Đang tải kho văn bằng...
+                          </td>
+                        </tr>
+                      ) : filteredCredentials.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={4}
+                            className="px-6 py-10 text-center text-sm text-slate-400"
+                          >
+                            Không tìm thấy văn bằng phù hợp.
+                          </td>
+                        </tr>
+                      ) : (
+                        (activeSection === "overview"
+                          ? filteredCredentials.slice(0, 5)
+                          : filteredCredentials
+                        ).map((cred) => (
+                          <tr
+                            key={cred.id}
+                            className="transition-colors hover:bg-slate-50/70"
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rose-50 text-rose-500">
+                                  <i className="fa-solid fa-file-pdf"></i>
+                                </div>
+                                <div>
+                                  <div className="text-sm font-bold text-slate-900">
+                                    {cred.credential_number ||
+                                      cred.name ||
+                                      "Văn bằng"}
+                                  </div>
+                                  <div className="text-xs text-slate-500">
+                                    {cred.recipient_name}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap font-mono text-xs">
+                              <div className="inline-flex items-center gap-2">
+                                <Link
+                                  href={`/verify/${encodeURIComponent(cred.tracking_id)}`}
+                                  className="font-semibold text-indigo-600 hover:underline"
+                                >
+                                  {cred.tracking_id}
+                                </Link>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    copyToClipboard(
+                                      cred.tracking_id,
+                                      `cred-${cred.id}`,
+                                    )
+                                  }
+                                  title="Sao chép mã tra cứu"
+                                  className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                                >
+                                  <i
+                                    className={`fa-solid ${
+                                      copiedId === `cred-${cred.id}`
+                                        ? "fa-check text-emerald-600"
+                                        : "fa-copy"
+                                    }`}
+                                  ></i>
+                                </button>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-xs">
+                              {cred.status === "REVOKED" ? (
+                                <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 font-semibold text-rose-700">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500"></span>
+                                  Đã thu hồi
+                                </span>
+                              ) : cred.status === "ISSUED" ? (
+                                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 font-semibold text-emerald-700">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                                  Đã phát hành
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 font-semibold text-slate-600">
+                                  Bản nháp
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right">
+                              <div className="inline-flex items-center gap-2">
+                                <Link
+                                  href={`/verify/${encodeURIComponent(cred.tracking_id)}`}
+                                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                                >
+                                  Đối soát
+                                </Link>
+                                {cred.status === "ISSUED" &&
+                                  data?.permissions.can_revoke_credentials && (
+                                    <button
+                                      type="button"
+                                      onClick={() => openRevokeModal(cred)}
+                                      className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 cursor-pointer"
+                                    >
+                                      Thu hồi
+                                    </button>
+                                  )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* SECTION: KHÓA & CHỨNG THƯ */}
+            {(activeSection === "overview" || activeSection === "keys") && (
+              <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm">
+                <div className="flex flex-col justify-between gap-3 border-b border-slate-100 bg-slate-50/60 px-6 py-4 sm:flex-row sm:items-center">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-100/80 text-indigo-700">
+                      <i className="fa-solid fa-key text-sm"></i>
+                    </div>
+                    <div>
+                      <h2 className="text-base font-bold text-slate-900">
+                        Khóa ký & Chứng thư số tổ chức
+                      </h2>
+                      <p className="text-xs text-slate-500">
+                        Quản lý cặp khóa mật mã KMS và xuất tệp Public Key
+                        (.pem)
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {data?.permissions.can_manage_api_keys && (
+                      <Link
+                        href="/api-keys"
+                        className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                      >
+                        Quản lý API Key
+                      </Link>
+                    )}
+                    <Link
+                      href="/generate-key"
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-indigo-700"
+                    >
+                      <i className="fa-solid fa-plus text-[10px]"></i>
+                      Khởi tạo khóa
+                    </Link>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-slate-200">
+                    <thead className="bg-slate-50/70">
+                      <tr>
+                        <th className="px-6 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Tên khóa / Fingerprint
+                        </th>
+                        <th className="px-6 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Lưu trữ & Trạng thái
+                        </th>
+                        <th className="px-6 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Ngày khởi tạo
+                        </th>
+                        <th className="px-6 py-3.5 text-right text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Công cụ
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {loading ? (
+                        <tr>
+                          <td
+                            colSpan={4}
+                            className="px-6 py-10 text-center text-sm text-slate-400"
+                          >
+                            <i className="fa-solid fa-circle-notch fa-spin mr-2 text-indigo-600"></i>
+                            Đang tải danh sách khóa...
+                          </td>
+                        </tr>
+                      ) : !data?.keys || data.keys.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={4}
+                            className="px-6 py-10 text-center text-sm text-slate-400"
+                          >
+                            Tổ chức chưa khởi tạo khóa ký số nào.
+                          </td>
+                        </tr>
+                      ) : (
+                        data.keys.map((k) => (
+                          <tr
+                            key={k.id}
+                            className="transition-colors hover:bg-slate-50/70"
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-bold text-slate-900">
+                                {k.name}
+                              </div>
+                              <div className="mt-1 inline-flex items-center gap-1.5 rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] text-slate-600">
+                                <span>
+                                  {k.algorithm} · {k.key_fingerprint}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="inline-flex items-center gap-1 rounded-md border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">
+                                  <i className="fa-solid fa-server text-[10px]"></i>
+                                  KMS Server
+                                </span>
+                                {k.is_revoked ? (
+                                  <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700">
+                                    Đã thu hồi
+                                  </span>
+                                ) : (
+                                  <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                                    Đang hoạt động
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-xs font-medium text-slate-500">
+                              {k.created_at}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right space-x-1.5">
                               <button
                                 type="button"
-                                onClick={() => void revokeCredential(cred)}
-                                className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100"
+                                onClick={() => viewPubKey(k)}
+                                className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-indigo-600 cursor-pointer"
                               >
-                                Thu hồi
+                                <i className="fa-solid fa-eye mr-1.5"></i>Xem
                               </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* KHỐI 4: LỊCH SỬ CHỮ KÝ */}
-          <div className="bg-white shadow-xl shadow-slate-200/40 rounded-2xl border border-slate-100 overflow-hidden mb-8">
-            <div className="bg-slate-50/80 px-6 py-5 border-b border-slate-100">
-              <div className="flex items-center">
-                <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center mr-3 shadow-inner">
-                  <i className="fa-solid fa-history text-lg"></i>
+                              <button
+                                type="button"
+                                onClick={() => downloadPubKey(k)}
+                                className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-emerald-600 cursor-pointer"
+                              >
+                                <i className="fa-solid fa-download mr-1.5"></i>
+                                .PEM
+                              </button>
+                              {!k.is_revoked &&
+                                data?.permissions.can_revoke_credentials && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void revokeKey(k)}
+                                    className="inline-flex items-center rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 cursor-pointer"
+                                  >
+                                    Thu hồi
+                                  </button>
+                                )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
-                <h3 className="text-lg font-bold text-slate-800">
-                  Lịch Sử Hoạt Động Ký Số
-                </h3>
               </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      Tài liệu đã ký
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      Khóa được dùng
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      Người đại diện ký
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      Thời gian (TSA)
-                    </th>
-                    <th className="px-6 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      Thao tác
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-slate-100">
-                  {loading ? (
-                    <tr>
-                      <td
-                        colSpan={5}
-                        className="px-6 py-10 text-center text-slate-400 font-medium"
-                      >
-                        <i className="fa-solid fa-circle-notch fa-spin text-2xl mr-2 text-blue-500"></i>{" "}
-                        Đang tải lịch sử ký...
-                      </td>
-                    </tr>
-                  ) : !data?.signatures || data.signatures.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={5}
-                        className="px-6 py-10 text-center text-slate-400 font-medium"
-                      >
-                        Chưa có lịch sử ký duyệt.
-                      </td>
-                    </tr>
+            )}
+
+            {/* SECTION: NHẬT KÝ KIỂM TOÁN */}
+            {(activeSection === "overview" || activeSection === "audit") && (
+              <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm">
+                <div className="flex flex-col justify-between gap-3 border-b border-slate-100 bg-slate-50/60 px-6 py-4 sm:flex-row sm:items-center">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100/80 text-blue-700">
+                      <i className="fa-solid fa-clock-rotate-left text-sm"></i>
+                    </div>
+                    <div>
+                      <h2 className="text-base font-bold text-slate-900">
+                        Nhật ký kiểm toán chữ ký (Audit Trail)
+                      </h2>
+                      <p className="text-xs text-slate-500">
+                        Lịch sử ký phát hành kèm dấu thời gian TSA và thông tin
+                        khóa sử dụng
+                      </p>
+                    </div>
+                  </div>
+
+                  {activeSection === "overview" ? (
+                    <button
+                      type="button"
+                      onClick={() => setActiveSection("audit")}
+                      className="self-start text-xs font-semibold text-indigo-600 hover:text-indigo-800 sm:self-auto cursor-pointer"
+                    >
+                      Xem toàn bộ ({data?.signatures.length ?? 0}) →
+                    </button>
                   ) : (
-                    data.signatures.map((s) => (
-                      <tr
-                        key={s.id}
-                        className="hover:bg-slate-50/50 transition-colors"
-                      >
-                        <td className="px-6 py-4 whitespace-nowrap font-bold text-slate-700 text-sm">
-                          <i className="fa-solid fa-file-signature mr-2 text-blue-500"></i>{" "}
-                          {s.credential_name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-600">
-                          <i className="fa-solid fa-key text-xs mr-2 text-slate-400"></i>{" "}
-                          {s.key_name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-800">
-                          {s.signer}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-500">
-                          {s.signed_at}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right">
-                          <button
-                            onClick={() => viewSignatureDetails(s)}
-                            className="inline-flex items-center justify-center px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white rounded-lg transition-all duration-200 text-xs font-bold border border-emerald-200 hover:border-transparent shadow-sm cursor-pointer"
-                            title="Xem chi tiết chữ ký"
-                          >
-                            <i className="fa-solid fa-file-shield mr-1.5"></i>{" "}
-                            Chi Tiết Chữ Ký
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                    <input
+                      type="text"
+                      value={sigSearch}
+                      onChange={(e) => setSigSearch(e.target.value)}
+                      placeholder="Tìm tài liệu, người ký, khóa..."
+                      className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none"
+                    />
                   )}
-                </tbody>
-              </table>
-            </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-slate-200">
+                    <thead className="bg-slate-50/70">
+                      <tr>
+                        <th className="px-6 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Tài liệu đã ký
+                        </th>
+                        <th className="px-6 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Khóa sử dụng
+                        </th>
+                        <th className="px-6 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Người đại diện ký
+                        </th>
+                        <th className="px-6 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Thời gian (TSA)
+                        </th>
+                        <th className="px-6 py-3.5 text-right text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Chi tiết
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {loading ? (
+                        <tr>
+                          <td
+                            colSpan={5}
+                            className="px-6 py-10 text-center text-sm text-slate-400"
+                          >
+                            <i className="fa-solid fa-circle-notch fa-spin mr-2 text-indigo-600"></i>
+                            Đang tải lịch sử kiểm toán...
+                          </td>
+                        </tr>
+                      ) : filteredSignatures.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={5}
+                            className="px-6 py-10 text-center text-sm text-slate-400"
+                          >
+                            Chưa có bản ghi ký duyệt nào.
+                          </td>
+                        </tr>
+                      ) : (
+                        (activeSection === "overview"
+                          ? filteredSignatures.slice(0, 5)
+                          : filteredSignatures
+                        ).map((s) => (
+                          <tr
+                            key={s.id}
+                            className="transition-colors hover:bg-slate-50/70"
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-800">
+                              <i className="fa-solid fa-file-signature mr-2 text-indigo-500"></i>
+                              {s.credential_name}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-xs font-medium text-slate-600">
+                              <span className="rounded bg-slate-100 px-2 py-0.5 font-mono">
+                                {s.key_name}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-xs font-semibold text-slate-800">
+                              {s.signer}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500">
+                              {s.signed_at}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right">
+                              <button
+                                type="button"
+                                onClick={() => viewSignatureDetails(s)}
+                                className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 cursor-pointer"
+                              >
+                                <i className="fa-solid fa-file-shield mr-1.5 text-indigo-600"></i>
+                                Bằng chứng
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </main>
+
+      {/* REVOKE CREDENTIAL MODAL */}
+      {revokeTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-xs"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="revoke-modal-title"
+        >
+          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+            <div className="flex items-start justify-between border-b border-slate-100 bg-slate-50/70 px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-600">
+                  <i className="fa-solid fa-ban text-sm"></i>
+                </div>
+                <div>
+                  <h3
+                    id="revoke-modal-title"
+                    className="text-base font-bold text-slate-900"
+                  >
+                    Thu hồi hiệu lực văn bằng
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Thao tác này không thể hoàn tác
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={revoking}
+                onClick={closeRevokeModal}
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 cursor-pointer"
+              >
+                <i className="fa-solid fa-xmark text-sm"></i>
+              </button>
+            </div>
+
+            <form onSubmit={handleRevokeSubmit} className="space-y-4 p-6">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs text-slate-600">
+                Văn bằng{" "}
+                <strong className="text-slate-900">
+                  {revokeTarget.credential_number || revokeTarget.name}
+                </strong>{" "}
+                của{" "}
+                <strong className="text-slate-900">
+                  {revokeTarget.recipient_name}
+                </strong>{" "}
+                sẽ hiển thị cảnh báo đã bị thu hồi khi tra cứu công khai.
+              </div>
+
+              {revokeError && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs font-medium text-rose-700">
+                  {revokeError}
+                </div>
+              )}
+
+              <div>
+                <label
+                  htmlFor="revokeReasonInput"
+                  className="mb-1.5 block text-xs font-semibold text-slate-700"
+                >
+                  Lý do thu hồi <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  id="revokeReasonInput"
+                  type="text"
+                  required
+                  disabled={revoking}
+                  value={revokeReason}
+                  onChange={(e) => setRevokeReason(e.target.value)}
+                  placeholder="VD: Sai lệch thông tin văn bằng..."
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="revokePasswordInput"
+                  className="mb-1.5 block text-xs font-semibold text-slate-700"
+                >
+                  Mật khẩu xác nhận <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  id="revokePasswordInput"
+                  type="password"
+                  required
+                  disabled={revoking}
+                  value={revokePassword}
+                  onChange={(e) => setRevokePassword(e.target.value)}
+                  placeholder="Nhập mật khẩu tài khoản hiện tại"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  disabled={revoking}
+                  onClick={closeRevokeModal}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={revoking}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-55 cursor-pointer"
+                >
+                  {revoking ? (
+                    <>
+                      <i className="fa-solid fa-spinner fa-spin"></i>
+                      <span>Đang thu hồi...</span>
+                    </>
+                  ) : (
+                    <span>Xác nhận thu hồi</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <Footer />
     </div>

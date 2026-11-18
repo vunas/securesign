@@ -197,6 +197,9 @@ importers:
 
   web:
     dependencies:
+      '@lottiefiles/dotlottie-react':
+        specifier: ^0.22.2
+        version: 0.22.2(react@19.3.1)
       next:
         specifier: 16.4.6
         version: 16.4.6(@babel/core@7.29.7(supports-color@10.2.2))(@types/node@26.6.6)(babel-plugin-macros@3.1.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -615,6 +618,16 @@ packages:
 
   '@keyv/serialize@1.1.1':
     resolution: {integrity: sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==}
+
+  '@lottiefiles/dotlottie-react@0.22.2':
+    resolution: {integrity: sha512-X91hm/hGigVt7PFRfcFYO5XeLqUAQSyhcAMfvpCBv7fNjUy8DCEENJdXglRsiUGGJezwqwaV2QoJxfDECoiiyw==}
+    engines: {node: '>=18.17.0', npm: '>=9.5.0'}
+    peerDependencies:
+      react: ^17 || ^18 || ^19
+
+  '@lottiefiles/dotlottie-web@0.83.2':
+    resolution: {integrity: sha512-MMI4RVcFtB5Vjv9mwbP8oWsSqy4N7GO2P+jwHVLo4GjbYAdR4Z7seK3rR7YefpcfayWrsQogaORMBzv6YFWntQ==}
+    engines: {node: '>=18.17.0', npm: '>=9.5.0'}
 
   '@napi-rs/wasm-runtime@1.2.5':
     resolution: {integrity: sha512-HshSvXzmBxNzqejd3k/KemgQ3hdREUYFRRrgxOZ+gPljDIsO2SDZrVZMd4Z/HsxudQbE62OVyVFE8z9BCurfjA==}
@@ -2660,6 +2673,13 @@ snapshots:
       keyv: 5.6.0
 
   '@keyv/serialize@1.1.1': {}
+
+  '@lottiefiles/dotlottie-react@0.22.2(react@19.3.1)':
+    dependencies:
+      '@lottiefiles/dotlottie-web': 0.83.2
+      react: 19.3.1
+
+  '@lottiefiles/dotlottie-web@0.83.2': {}
 
   '@napi-rs/wasm-runtime@1.2.5(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
     dependencies:
