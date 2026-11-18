@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 export default function Footer() {
   const scrollToTop = () => {
     if (typeof window !== "undefined") {
@@ -8,39 +10,49 @@ export default function Footer() {
   };
 
   return (
-    <footer className="bg-white border-t border-slate-200 py-8 md:py-10 mt-auto">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-4 md:gap-6">
-        <div className="flex items-center space-x-3">
-          <div
-            className="flex items-center space-x-3 group cursor-pointer"
-            onClick={scrollToTop}
-          >
-            <div className="bg-gradient-to-tr from-blue-600 to-indigo-600 text-white p-2 md:p-2.5 rounded-xl shadow-lg shadow-blue-500/30 group-hover:shadow-blue-500/50 transition-all duration-300">
-              <i className="fa-solid fa-file-signature text-xl"></i>
-            </div>
-            <span className="font-extrabold text-xl md:text-2xl tracking-tight text-slate-900">
-              Secure<span className="text-blue-600">Sign</span>
-            </span>
+    <footer className="mt-auto border-t border-slate-200/90 bg-white py-6">
+      <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 sm:px-6 md:flex-row lg:px-8">
+        {/* Brand */}
+        <button
+          type="button"
+          onClick={scrollToTop}
+          className="group inline-flex items-center gap-2.5 cursor-pointer"
+        >
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-linear-to-tr from-blue-600 to-indigo-600 text-white shadow-xs transition group-hover:shadow-indigo-500/30">
+            <i className="fa-solid fa-file-signature text-xs"></i>
           </div>
+          <span className="text-base font-extrabold tracking-tight text-slate-900">
+            Secure<span className="text-blue-600">Sign</span>
+          </span>
+        </button>
+
+        {/* Quick Links & Copyright */}
+        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs font-medium text-slate-500">
+          <Link href="/verify" className="transition hover:text-indigo-600">
+            Xác thực văn bằng
+          </Link>
+          <Link href="/register" className="transition hover:text-indigo-600">
+            Đăng ký tổ chức
+          </Link>
+          <span className="hidden text-slate-300 sm:inline">|</span>
+          <span>
+            &copy; 2026{" "}
+            <strong className="font-semibold text-slate-800">SecureSign</strong>
+            . All rights reserved.
+          </span>
         </div>
 
-        <p className="text-sm text-slate-500 font-medium text-center md:text-left order-3 md:order-none">
-          &copy; 2026 by <span className="font-semibold text-gray-900">SecureSign</span>. All rights reserved.
-        </p>
-
-        <div className="flex space-x-4 md:space-x-5 order-2 md:order-none">
-          <a
-            href="https://github.com/Vunas/digital-signature-system"
-            className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
-            target="_blank"
-            rel="noopener noreferrer"
-            title="GitHub Repository"
-          >
-            <i className="fa-brands fa-github text-lg"></i>
-          </a>
-        </div>
+        {/* GitHub */}
+        <a
+          href="https://github.com/vunas/digital-signature-system"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-600 transition hover:border-slate-300 hover:bg-slate-900 hover:text-white"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="GitHub Repository"
+        >
+          <i className="fa-brands fa-github text-sm"></i>
+        </a>
       </div>
     </footer>
   );
 }
-
