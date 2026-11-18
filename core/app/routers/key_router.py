@@ -14,9 +14,9 @@ router = APIRouter(prefix="/api/keys", tags=["Keys"])
 async def generate_new_key(
     key_data: KeyCreate,
     db: DatabaseDep,
-    current_user: ActiveTenantUserDep,
+    current_user: TenantAdminDep,
 ):
-    """Tạo một cặp khóa ký và lưu trên Server."""
+    """Tạo một cặp khóa ký và lưu trên Server. Chỉ dành cho Quản trị viên tổ chức (Tenant Admin)."""
     return await key_service.create_key(
         db, current_user.tenant_id, key_data, user_id=current_user.id
     )

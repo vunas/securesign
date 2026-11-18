@@ -29,7 +29,7 @@ async def issue_credential(
     credential_number: str | None = Form(None, max_length=100),
     issue_date: date | None = Form(None),
     metadata: str | None = Form(None),
-    signer_name: str = Form(..., min_length=1, max_length=100),
+    signer_name: str | None = Form(None, max_length=100),
     signer_reason: str = Form("Cấp phát văn bằng"),
     signer_location: str = Form("Việt Nam"),
 ):
@@ -37,6 +37,13 @@ async def issue_credential(
         ".pdf"
     ):
         raise HTTPException(status_code=415, detail="Chỉ chấp nhận tệp PDF.")
+
+    # Ưu tiên lấy danh tính người ký từ token đăng nhập của Operator thay vì client payload
+    effective_signer_name = (
+        current_user.full_name.strip()
+        if current_user.full_name and current_user.full_name.strip()
+        else current_user.username
+    )
 
     try:
         metadata_payload = json.loads(metadata) if metadata else None
@@ -46,7 +53,7 @@ async def issue_credential(
         sign_data = SignatureCreate(
             credential_id=0,
             key_id=key_id,
-            signer_name=signer_name,
+            signer_name=effective_signer_name,
             signer_reason=signer_reason,
             signer_location=signer_location,
         )
@@ -77,7 +84,12 @@ async def issue_credential(
         action="ISSUE_CREDENTIAL",
         target_type=TargetResourceType.CREDENTIAL,
         target_id=tracking_id,
-        payload={"signed_hash": signed_hash},
+        payload={
+            "signed_hash": signed_hash,
+            "operator_id": current_user.id,
+            "operator_username": current_user.username,
+            "signer_name": effective_signer_name,
+        },
     )
     return StreamingResponse(
         iter([signed_pdf]),

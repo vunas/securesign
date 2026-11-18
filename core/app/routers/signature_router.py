@@ -18,13 +18,19 @@ async def sign_credential(
     file: UploadFile = File(...),
     credential_id: int = Form(...),
     key_id: int = Form(...),
-    signer_name: str = Form(...),
+    signer_name: str | None = Form(None),
     signer_reason: str = Form("Xác nhận credential"),
     signer_location: str = Form("Việt Nam"),
 ):
     """Ký số lên tài liệu PDF bằng cách tương tác với hệ thống PKI nội bộ."""
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Vui lòng tải lên file định dạng PDF.")
+
+    effective_signer_name = (
+        current_user.full_name.strip()
+        if current_user.full_name and current_user.full_name.strip()
+        else current_user.username
+    )
 
     try:
         pdf_bytes = await file.read(MAX_FILE_SIZE + 1)
@@ -39,7 +45,7 @@ async def sign_credential(
         sign_data = SignatureCreate(
             credential_id=credential_id,
             key_id=key_id,
-            signer_name=signer_name,
+            signer_name=effective_signer_name,
             signer_reason=signer_reason,
             signer_location=signer_location,
             verification_url=(
