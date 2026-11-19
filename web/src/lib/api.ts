@@ -2,12 +2,43 @@ import { showAlert } from './swal';
 
 const API_URL = '';
 
-let isRefreshing = false;
-let refreshSubscribers: ((isSuccess: boolean) => void)[] = [];
+let refreshPromise: Promise<boolean> | null = null;
 
-function onRefreshed(isSuccess: boolean) {
-  refreshSubscribers.forEach((callback) => callback(isSuccess));
-  refreshSubscribers = [];
+async function refreshSession(): Promise<void> {
+  if (!refreshPromise) {
+    refreshPromise = fetch(`${API_URL}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+    })
+      .then((response) => response.ok)
+      .catch(() => false)
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+
+  if (!(await refreshPromise)) {
+    await forceLogout();
+    throw new Error('Phiên đăng nhập hết hạn');
+  }
+}
+
+export async function fetchAPIResponse(
+  endpoint: string,
+  requestOptions: RequestInit = {}
+): Promise<Response> {
+  const options: RequestInit = {
+    credentials: 'include',
+    ...requestOptions,
+  };
+  let response = await fetch(`${API_URL}${endpoint}`, options);
+
+  if (response.status === 401 && !endpoint.includes('/auth/')) {
+    await refreshSession();
+    response = await fetch(`${API_URL}${endpoint}`, options);
+  }
+
+  return response;
 }
 
 export async function fetchAPI<T = unknown>(
@@ -24,7 +55,6 @@ export async function fetchAPI<T = unknown>(
   const options: RequestInit = {
     method,
     headers,
-    credentials: 'include',
   };
 
   if (body) {
@@ -32,47 +62,7 @@ export async function fetchAPI<T = unknown>(
   }
 
   try {
-    let response = await fetch(`${API_URL}${endpoint}`, options);
-
-    // If 401 Unauthorized and not an auth endpoint
-    if (response.status === 401 && !endpoint.includes('/auth/')) {
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          refreshSubscribers.push(async (isSuccess) => {
-            if (isSuccess) {
-              try {
-                resolve(await fetchAPI<T>(endpoint, method, body, isFormData));
-              } catch (err) {
-                reject(err);
-              }
-            } else {
-              reject(new Error('Phiên đăng nhập hết hạn'));
-            }
-          });
-        });
-      }
-
-      isRefreshing = true;
-      try {
-        const refreshRes = await fetch(`${API_URL}/auth/refresh`, {
-          method: 'POST',
-          credentials: 'include',
-        });
-
-        if (refreshRes.ok) {
-          isRefreshing = false;
-          onRefreshed(true);
-          response = await fetch(`${API_URL}${endpoint}`, options);
-        } else {
-          throw new Error('Refresh failed');
-        }
-      } catch (err) {
-        isRefreshing = false;
-        onRefreshed(false);
-        await forceLogout();
-        throw err;
-      }
-    }
+    const response = await fetchAPIResponse(endpoint, options);
 
     // Check if the response is a blob/file stream or json
     const contentType = response.headers.get('content-type') || '';
@@ -89,7 +79,8 @@ export async function fetchAPI<T = unknown>(
     }
     return data as T;
   } catch (error: unknown) {
-    const err = error as Error;
+    const err =
+      error instanceof Error ? error : new Error('Đã có lỗi xảy ra');
     // Don't pop up alert for 401 if we are redirecting
     if (!err.message?.includes('Phiên đăng nhập hết hạn')) {
       await showAlert('Thất bại', err.message || 'Đã có lỗi xảy ra', 'error');

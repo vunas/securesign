@@ -84,6 +84,8 @@ docker compose up --build
 ```
 
 For HTTPS deployments, set `COOKIE_SECURE=true` and use an HTTPS `PUBLIC_APP_URL`.
+The web server uses `INTERNAL_API_URL` for authenticated server-side requests.
+Compose defaults it to `http://api:8000`.
 
 ## Useful commands
 

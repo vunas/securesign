@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useSyncExternalStore, useState } from "react";
 import { forceLogout } from "@/lib/api";
+import { useSessionUser } from "@/components/SessionProvider";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Tổng quan", icon: "fa-solid fa-chart-pie" },
@@ -57,12 +58,15 @@ function getRoleSnapshot() {
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const username = useSyncExternalStore(
+  const sessionUser = useSessionUser();
+  const storedUsername = useSyncExternalStore(
     subscribe,
     getUsernameSnapshot,
     () => "",
   );
-  const role = useSyncExternalStore(subscribe, getRoleSnapshot, () => "");
+  const storedRole = useSyncExternalStore(subscribe, getRoleSnapshot, () => "");
+  const username = sessionUser?.username ?? storedUsername;
+  const role = sessionUser?.role ?? storedRole;
 
   const isAuthenticated = Boolean(username && role);
 
