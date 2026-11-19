@@ -1,8 +1,10 @@
 import base64
 
 from fastapi import APIRouter, HTTPException, status
+from sqlalchemy import select
 
 from app.core.dependencies import ActiveTenantUserDep, DatabaseDep
+from app.models.certificate import Certificate
 from app.models.enums import UserRole
 from app.repositories.credential_repo import credential_repo
 from app.repositories.key_repo import key_repo
@@ -21,6 +23,15 @@ async def get_dashboard_summary(db: DatabaseDep, current_user: ActiveTenantUserD
     if tenant_id is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant role required.")
     keys = await key_repo.get_all_by_tenant(db, tenant_id)
+    certificate_result = await db.execute(
+        select(Certificate).where(
+            Certificate.tenant_id == tenant_id,
+            Certificate.key_id.in_([key.id for key in keys]),
+        )
+    )
+    certificate_by_key = {
+        certificate.key_id: certificate for certificate in certificate_result.scalars().all()
+    }
     docs = await credential_repo.get_all_by_tenant(db, tenant_id)
     quota = await quota_service.get_current_quota(db, tenant_id)
 
@@ -66,12 +77,14 @@ async def get_dashboard_summary(db: DatabaseDep, current_user: ActiveTenantUserD
         },
         "permissions": {
             "can_manage_api_keys": current_user.role == UserRole.TENANT_ADMIN,
+            "can_revoke_keys": current_user.role == UserRole.TENANT_ADMIN,
             "can_revoke_credentials": current_user.role == UserRole.TENANT_ADMIN,
         },
         "keys": [
             {
                 "id": k.id,
                 "name": k.key_name,
+                "category": _key_category(certificate_by_key.get(k.id)),
                 "algorithm": k.algorithm.value,
                 "storage_type": k.storage_type.value,
                 "created_at": k.created_at.strftime("%d-%m-%Y") if k.created_at else "",
@@ -99,3 +112,15 @@ async def get_dashboard_summary(db: DatabaseDep, current_user: ActiveTenantUserD
         ],
         "signatures": signatures_list,
     }
+
+
+def _key_category(certificate: Certificate | None) -> str:
+    if certificate is None:
+        return "UNCERTIFIED"
+    if certificate.purpose == "timestamping":
+        return "TSA"
+    return {
+        "root": "ROOT_CA",
+        "intermediate": "INTERMEDIATE_CA",
+        "end_entity": "SIGNING",
+    }.get(certificate.cert_type.value, "OTHER")

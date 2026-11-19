@@ -45,10 +45,8 @@ async def test_review_approval_creates_initial_quota(monkeypatch):
     reviewer = SimpleNamespace(id=4)
     db = SimpleNamespace(get=AsyncMock(return_value=tenant), add=Mock(), flush=AsyncMock())
     monkeypatch.setattr("app.services.tenant_service.log_service.log_action", AsyncMock())
-    monkeypatch.setattr(
-        "app.services.tenant_service.certificate_service.get_root_ca",
-        AsyncMock(return_value=SimpleNamespace(subject="Platform Root", id=1)),
-    )
+    get_root_ca = AsyncMock(return_value=SimpleNamespace(subject="Tenant Root", id=1))
+    monkeypatch.setattr("app.services.tenant_service.certificate_service.get_root_ca", get_root_ca)
     key_counter = iter([SimpleNamespace(id=11), SimpleNamespace(id=12)])
     monkeypatch.setattr(
         "app.services.tenant_service.key_service.create_key",
@@ -67,6 +65,7 @@ async def test_review_approval_creates_initial_quota(monkeypatch):
     )
 
     quota = db.add.call_args.args[0]
+    assert get_root_ca.await_args.args == (db, tenant.id)
     assert result is tenant
     assert api_key_secret is None
     assert tenant.status == TenantStatus.ACTIVE

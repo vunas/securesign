@@ -241,10 +241,11 @@ class CertificateService:
         )
         return created_cert
 
-    async def get_root_ca(self, db: AsyncSession):
-        result = await db.execute(
-            select(Certificate).filter(Certificate.cert_type == CertType.ROOT)
-        )
+    async def get_root_ca(self, db: AsyncSession, tenant_id: int | None = None):
+        statement = select(Certificate).where(Certificate.cert_type == CertType.ROOT)
+        if tenant_id is not None:
+            statement = statement.where(Certificate.tenant_id == tenant_id)
+        result = await db.execute(statement)
         return result.scalars().first()
 
     async def get_intermediate_ca(self, db: AsyncSession):

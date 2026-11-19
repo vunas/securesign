@@ -54,13 +54,6 @@ function getRoleSnapshot() {
   return "";
 }
 
-function formatRoleLabel(role: string): string {
-  if (role === "PLATFORM_SUPER_ADMIN") return "Quản trị nền tảng";
-  if (role === "TENANT_ADMIN") return "Quản trị tổ chức";
-  if (role === "TENANT_OPERATOR") return "Cán bộ nghiệp vụ";
-  return "";
-}
-
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -98,8 +91,6 @@ export default function Navbar() {
   const handleLogout = async () => {
     await forceLogout();
   };
-
-  const roleLabel = formatRoleLabel(role);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-200/90 bg-white/95 backdrop-blur-md">
@@ -170,11 +161,6 @@ export default function Navbar() {
                   <span className="block max-w-35 truncate text-xs font-semibold text-slate-800">
                     {username}
                   </span>
-                  {roleLabel && (
-                    <span className="block text-[10px] font-medium text-slate-500">
-                      {roleLabel}
-                    </span>
-                  )}
                 </div>
               </div>
 

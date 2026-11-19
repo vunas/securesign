@@ -70,8 +70,7 @@ The seed command creates demo accounts and prints their usernames/passwords to t
 | Role | Username | Password |
 |---|---|---|
 | Platform Super Admin | `admin` | `123456` |
-| Tenant Admin | `giamdoc` | `123456` |
-| Tenant Operator | `nhanvien` | `123456` |
+| Tenant Admin | `group` | `123456` |
 | Tenant Operator | `demo` | `123456` |
 
 These credentials and seed data are for local coursework/demo use only and must never be used in production.
