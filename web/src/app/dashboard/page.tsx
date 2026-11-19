@@ -16,6 +16,7 @@ interface KeyItem {
   created_at: string;
   public_key: string;
   key_fingerprint: string;
+  category: "ROOT_CA" | "INTERMEDIATE_CA" | "TSA" | "SIGNING" | "UNCERTIFIED" | "OTHER";
   is_revoked: boolean;
 }
 
@@ -54,6 +55,7 @@ interface DashboardData {
   };
   permissions: {
     can_manage_api_keys: boolean;
+    can_revoke_keys: boolean;
     can_revoke_credentials: boolean;
   };
   keys: KeyItem[];
@@ -216,16 +218,16 @@ export default function DashboardPage() {
     if (Swal) {
       const confirmResult = await Swal.fire({
         icon: "warning",
-        title: "Thu hồi khóa ký số?",
+        title: "Thu hồi vĩnh viễn khóa ký số?",
         html: `<p class="text-sm text-slate-600">Khóa <b class="text-slate-900">${escapeHtml(key.name)}</b> và chứng thư X.509 liên kết sẽ ngừng hoạt động ngay lập tức.</p>`,
         showCancelButton: true,
-        confirmButtonText: "Thu hồi khóa",
+        confirmButtonText: "Thu hồi vĩnh viễn",
         cancelButtonText: "Hủy",
         confirmButtonColor: "#e11d48",
       });
       if (!confirmResult.isConfirmed) return;
     } else if (
-      !window.confirm(`Thu hồi khóa "${key.name}" và chứng thư liên kết?`)
+      !window.confirm(`Thu hồi vĩnh viễn khóa "${key.name}" và chứng thư liên kết?`)
     ) {
       return;
     }
@@ -234,7 +236,7 @@ export default function DashboardPage() {
       await fetchAPI(`/api/keys/${key.id}/revoke`, "POST");
       const refreshed = await fetchAPI<DashboardData>("/dashboard-api/summary");
       setData(refreshed);
-      showToast("Khóa và chứng thư đã được thu hồi.", "success");
+      showToast("Đã thu hồi vĩnh viễn khóa và chứng thư liên kết.", "success");
     } catch (error: unknown) {
       showToast(
         error instanceof Error ? error.message : "Không thể thu hồi khóa.",
@@ -656,133 +658,337 @@ export default function DashboardPage() {
 
                 {/* VISUAL ANALYTICS CHARTS ROW */}
                 <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
-                  {/* Chart 1: Signing Frequency by Day */}
+                  {/* Chart 1: Smooth Area / Line Chart */}
                   <div className="flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm xl:col-span-7">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
                         <h3 className="text-sm font-bold text-slate-900">
-                          Tần suất ký phát hành gần đây
+                          Xu hướng ký phát hành gần đây
                         </h3>
                         <p className="mt-0.5 text-xs text-slate-500">
-                          Số lượt ký số hoàn tất theo từng ngày hoạt động
+                          Biến động số lượt ký số hoàn tất theo từng ngày hoạt
+                          động
                         </p>
                       </div>
-                      <span className="rounded-lg bg-indigo-50 px-2.5 py-1 font-mono text-xs font-semibold text-indigo-700">
+                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-100 bg-indigo-50/80 px-2.5 py-1 font-mono text-xs font-bold text-indigo-700">
+                        <span className="h-1.5 w-1.5 rounded-full bg-indigo-600"></span>
                         Tổng: {data?.stats.total_sigs ?? 0} lượt
                       </span>
                     </div>
 
                     {loading ? (
-                      <div className="flex h-44 items-center justify-center text-xs text-slate-400">
+                      <div className="flex h-52 items-center justify-center text-xs text-slate-400">
+                        <i className="fa-solid fa-circle-notch fa-spin mr-2 text-indigo-600"></i>
                         Đang tổng hợp biểu đồ...
                       </div>
                     ) : signingChartData.length === 0 ? (
-                      <div className="mt-4 flex h-40 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60 text-xs text-slate-400">
-                        <i className="fa-solid fa-chart-column mb-2 text-lg text-slate-300"></i>
-                        Chưa có dữ liệu ký số để hiển thị biểu đồ
+                      <div className="mt-4 flex h-48 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60 text-xs text-slate-400">
+                        <i className="fa-solid fa-chart-line mb-2 text-lg text-slate-300"></i>
+                        Chưa có dữ liệu ký số để hiển thị biểu đồ đường
                       </div>
                     ) : (
-                      <div className="mt-6 grid h-44 grid-cols-7 items-end gap-3 border-b border-slate-100 pb-3 pt-4">
-                        {signingChartData.map((bar) => (
-                          <div
-                            key={bar.label}
-                            className="flex h-full flex-col items-center justify-end gap-2 group"
-                          >
-                            <span className="font-mono text-[11px] font-bold text-slate-700">
-                              {bar.count}
-                            </span>
-                            <div className="flex w-full max-w-9.5 flex-1 items-end rounded-t-lg bg-slate-100/80 p-0.5">
-                              <div
-                                className="w-full rounded-t-md bg-linear-to-t from-indigo-600 to-blue-500 transition-all duration-500 group-hover:from-indigo-700 group-hover:to-blue-600"
-                                style={{ height: `${bar.heightPercent}%` }}
-                                title={`${bar.label}: ${bar.count} lượt ký`}
-                              />
-                            </div>
-                            <span className="font-mono text-[11px] font-medium text-slate-500">
-                              {bar.label}
-                            </span>
+                      (() => {
+                        const width = 560;
+                        const height = 185;
+                        const padLeft = 34;
+                        const padRight = 22;
+                        const padTop = 24;
+                        const padBottom = 28;
+                        const plotW = width - padLeft - padRight;
+                        const plotH = height - padTop - padBottom;
+                        const maxCount = Math.max(
+                          ...signingChartData.map((d) => d.count),
+                          1,
+                        );
+
+                        const points = signingChartData.map((item, idx) => {
+                          const x =
+                            signingChartData.length === 1
+                              ? padLeft + plotW / 2
+                              : padLeft +
+                                (idx / (signingChartData.length - 1)) * plotW;
+                          const y =
+                            padTop + plotH - (item.count / maxCount) * plotH;
+                          return { ...item, x, y };
+                        });
+
+                        // Smooth cubic bezier path
+                        const linePath = points.reduce((acc, pt, i, arr) => {
+                          if (i === 0) return `M ${pt.x} ${pt.y}`;
+                          const prev = arr[i - 1];
+                          const cpX = (prev.x + pt.x) / 2;
+                          return `${acc} C ${cpX} ${prev.y}, ${cpX} ${pt.y}, ${pt.x} ${pt.y}`;
+                        }, "");
+
+                        const areaPath =
+                          points.length > 1
+                            ? `${linePath} L ${points[points.length - 1].x} ${padTop + plotH} L ${points[0].x} ${padTop + plotH} Z`
+                            : "";
+
+                        const yTicks = [maxCount, Math.ceil(maxCount / 2), 0];
+
+                        return (
+                          <div className="mt-4 w-full">
+                            <svg
+                              viewBox={`0 0 ${width} ${height}`}
+                              className="h-52 w-full overflow-visible"
+                              role="img"
+                              aria-label="Biểu đồ đường xu hướng ký số"
+                            >
+                              <defs>
+                                <linearGradient
+                                  id="signingAreaGradient"
+                                  x1="0"
+                                  y1="0"
+                                  x2="0"
+                                  y2="1"
+                                >
+                                  <stop
+                                    offset="0%"
+                                    stopColor="#4f46e5"
+                                    stopOpacity="0.24"
+                                  />
+                                  <stop
+                                    offset="100%"
+                                    stopColor="#4f46e5"
+                                    stopOpacity="0.0"
+                                  />
+                                </linearGradient>
+                              </defs>
+
+                              {/* Horizontal Gridlines & Y-axis labels */}
+                              {yTicks.map((tickVal, idx) => {
+                                const yPos =
+                                  padTop + plotH - (tickVal / maxCount) * plotH;
+                                return (
+                                  <g key={`${tickVal}-${idx}`}>
+                                    <line
+                                      x1={padLeft}
+                                      y1={yPos}
+                                      x2={width - padRight}
+                                      y2={yPos}
+                                      stroke="#e2e8f0"
+                                      strokeDasharray={
+                                        tickVal === 0 ? undefined : "4 4"
+                                      }
+                                      strokeWidth="1"
+                                    />
+                                    <text
+                                      x={padLeft - 8}
+                                      y={yPos + 4}
+                                      textAnchor="end"
+                                      className="fill-slate-400 font-mono text-[10px]"
+                                    >
+                                      {tickVal}
+                                    </text>
+                                  </g>
+                                );
+                              })}
+
+                              {/* Area Fill */}
+                              {areaPath && (
+                                <path
+                                  d={areaPath}
+                                  fill="url(#signingAreaGradient)"
+                                />
+                              )}
+
+                              {/* Smooth Curve Line */}
+                              {points.length > 1 && (
+                                <path
+                                  d={linePath}
+                                  fill="none"
+                                  stroke="#4f46e5"
+                                  strokeWidth="2.75"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              )}
+
+                              {/* Data Nodes, Count Badges & X-Axis Labels */}
+                              {points.map((pt) => (
+                                <g key={pt.label} className="group">
+                                  <line
+                                    x1={pt.x}
+                                    y1={pt.y}
+                                    x2={pt.x}
+                                    y2={padTop + plotH}
+                                    stroke="#c7d2fe"
+                                    strokeDasharray="3 3"
+                                    strokeWidth="1"
+                                  />
+                                  <circle
+                                    cx={pt.x}
+                                    cy={pt.y}
+                                    r="5"
+                                    className="fill-white stroke-indigo-600 transition-all group-hover:r-6"
+                                    strokeWidth="2.75"
+                                  />
+                                  <text
+                                    x={pt.x}
+                                    y={pt.y - 10}
+                                    textAnchor="middle"
+                                    className="fill-slate-800 font-mono text-[11px] font-bold"
+                                  >
+                                    {pt.count}
+                                  </text>
+                                  <text
+                                    x={pt.x}
+                                    y={height - 6}
+                                    textAnchor="middle"
+                                    className="fill-slate-500 font-mono text-[11px] font-medium"
+                                  >
+                                    {pt.label}
+                                  </text>
+                                </g>
+                              ))}
+                            </svg>
                           </div>
-                        ))}
-                      </div>
+                        );
+                      })()
                     )}
                   </div>
 
-                  {/* Chart 2: Credential Lifecycle Distribution */}
+                  {/* Chart 2: Donut Chart (Credential Lifecycle Distribution) */}
                   <div className="flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm xl:col-span-5">
                     <div>
                       <h3 className="text-sm font-bold text-slate-900">
                         Tình trạng hiệu lực văn bằng
                       </h3>
                       <p className="mt-0.5 text-xs text-slate-500">
-                        Phân bổ trạng thái xác thực trên cổng tra cứu
+                        Tỷ trọng trạng thái xác thực trên cổng tra cứu
                       </p>
                     </div>
 
-                    {/* Stacked Horizontal Bar */}
-                    <div className="my-5">
-                      <div className="flex h-3.5 w-full overflow-hidden rounded-full bg-slate-100">
-                        {credentialBreakdown.issuedPct > 0 && (
-                          <div
-                            className="bg-emerald-500 transition-all"
-                            style={{
-                              width: `${credentialBreakdown.issuedPct}%`,
-                            }}
-                            title={`Đã phát hành: ${credentialBreakdown.issued}`}
-                          />
-                        )}
-                        {credentialBreakdown.revokedPct > 0 && (
-                          <div
-                            className="bg-rose-500 transition-all"
-                            style={{
-                              width: `${credentialBreakdown.revokedPct}%`,
-                            }}
-                            title={`Đã thu hồi: ${credentialBreakdown.revoked}`}
-                          />
-                        )}
-                        {credentialBreakdown.draftPct > 0 && (
-                          <div
-                            className="bg-slate-400 transition-all"
-                            style={{
-                              width: `${credentialBreakdown.draftPct}%`,
-                            }}
-                            title={`Bản nháp: ${credentialBreakdown.draft}`}
-                          />
-                        )}
-                      </div>
-                    </div>
+                    {(() => {
+                      const size = 148;
+                      const strokeWidth = 18;
+                      const radius = (size - strokeWidth) / 2;
+                      const circumference = 2 * Math.PI * radius;
+                      const total = credentialBreakdown.total;
 
-                    <div className="space-y-3 text-xs">
-                      <div className="flex items-center justify-between">
-                        <span className="flex items-center gap-2 font-medium text-slate-700">
-                          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
-                          Đang có hiệu lực (Issued)
-                        </span>
-                        <span className="font-mono font-bold text-slate-900">
-                          {credentialBreakdown.issued} (
-                          {credentialBreakdown.issuedPct}%)
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="flex items-center gap-2 font-medium text-slate-700">
-                          <span className="h-2.5 w-2.5 rounded-full bg-rose-500"></span>
-                          Đã thu hồi (Revoked)
-                        </span>
-                        <span className="font-mono font-bold text-slate-900">
-                          {credentialBreakdown.revoked} (
-                          {credentialBreakdown.revokedPct}%)
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="flex items-center gap-2 font-medium text-slate-700">
-                          <span className="h-2.5 w-2.5 rounded-full bg-slate-400"></span>
-                          Bản nháp (Draft)
-                        </span>
-                        <span className="font-mono font-bold text-slate-900">
-                          {credentialBreakdown.draft} (
-                          {credentialBreakdown.draftPct}%)
-                        </span>
-                      </div>
-                    </div>
+                      const segments = [
+                        {
+                          key: "issued",
+                          label: "Đang có hiệu lực",
+                          tag: "Issued",
+                          count: credentialBreakdown.issued,
+                          pct: credentialBreakdown.issuedPct,
+                          color: "#10b981", // emerald-500
+                          dotClass: "bg-emerald-500",
+                        },
+                        {
+                          key: "revoked",
+                          label: "Đã thu hồi",
+                          tag: "Revoked",
+                          count: credentialBreakdown.revoked,
+                          pct: credentialBreakdown.revokedPct,
+                          color: "#f43f5e", // rose-500
+                          dotClass: "bg-rose-500",
+                        },
+                        {
+                          key: "draft",
+                          label: "Bản nháp",
+                          tag: "Draft",
+                          count: credentialBreakdown.draft,
+                          pct: credentialBreakdown.draftPct,
+                          color: "#94a3b8", // slate-400
+                          dotClass: "bg-slate-400",
+                        },
+                      ];
+
+                      let accumulatedRatio = 0;
+
+                      return (
+                        <div className="my-auto flex flex-col items-center gap-6 pt-4 sm:flex-row xl:flex-col 2xl:flex-row">
+                          {/* Donut Ring */}
+                          <div className="relative flex shrink-0 items-center justify-center">
+                            <svg
+                              width={size}
+                              height={size}
+                              viewBox={`0 0 ${size} ${size}`}
+                              className="-rotate-90"
+                              role="img"
+                              aria-label="Biểu đồ tròn phân bổ trạng thái văn bằng"
+                            >
+                              {/* Base Track */}
+                              <circle
+                                cx={size / 2}
+                                cy={size / 2}
+                                r={radius}
+                                fill="none"
+                                stroke="#f1f5f9"
+                                strokeWidth={strokeWidth}
+                              />
+
+                              {total > 0 &&
+                                segments.map((seg) => {
+                                  if (seg.count === 0) return null;
+                                  const ratio = seg.count / total;
+                                  const dashLength = ratio * circumference;
+                                  const dashOffset =
+                                    -accumulatedRatio * circumference;
+                                  accumulatedRatio += ratio;
+
+                                  return (
+                                    <circle
+                                      key={seg.key}
+                                      cx={size / 2}
+                                      cy={size / 2}
+                                      r={radius}
+                                      fill="none"
+                                      stroke={seg.color}
+                                      strokeWidth={strokeWidth}
+                                      strokeDasharray={`${dashLength} ${circumference}`}
+                                      strokeDashoffset={dashOffset}
+                                      strokeLinecap={
+                                        segments.filter((s) => s.count > 0)
+                                          .length === 1
+                                          ? "butt"
+                                          : "round"
+                                      }
+                                      className="transition-all duration-500"
+                                    />
+                                  );
+                                })}
+                            </svg>
+
+                            {/* Center Label inside Donut */}
+                            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+                              <span className="text-[11px] font-semibold text-slate-400">
+                                Tổng cộng
+                              </span>
+                              <span className="text-2xl font-extrabold tracking-tight text-slate-900">
+                                {loading ? "..." : total}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Legend List */}
+                          <div className="w-full flex-1 space-y-2.5 text-xs">
+                            {segments.map((seg) => (
+                              <div
+                                key={seg.key}
+                                className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2"
+                              >
+                                <span className="flex items-center gap-2 font-medium text-slate-700">
+                                  <span
+                                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${seg.dotClass}`}
+                                  ></span>
+                                  <span>{seg.label}</span>
+                                </span>
+                                <span className="font-mono font-bold text-slate-900">
+                                  {seg.count}{" "}
+                                  <span className="font-normal text-slate-400">
+                                    ({seg.pct}%)
+                                  </span>
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </>
@@ -1081,6 +1287,16 @@ export default function DashboardPage() {
                                   <i className="fa-solid fa-server text-[10px]"></i>
                                   KMS Server
                                 </span>
+                                <span className="inline-flex items-center rounded-md border border-violet-100 bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">
+                                  {{
+                                    ROOT_CA: "Root CA",
+                                    INTERMEDIATE_CA: "Intermediate CA",
+                                    TSA: "TSA",
+                                    SIGNING: "Khóa ký văn bằng",
+                                    UNCERTIFIED: "Chưa cấp chứng thư",
+                                    OTHER: "Khóa khác",
+                                  }[k.category] || "Khóa khác"}
+                                </span>
                                 {k.is_revoked ? (
                                   <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700">
                                     Đã thu hồi
@@ -1112,13 +1328,13 @@ export default function DashboardPage() {
                                 .PEM
                               </button>
                               {!k.is_revoked &&
-                                data?.permissions.can_revoke_credentials && (
+                                data?.permissions.can_revoke_keys && (
                                   <button
                                     type="button"
                                     onClick={() => void revokeKey(k)}
                                     className="inline-flex items-center rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 cursor-pointer"
                                   >
-                                    Thu hồi
+                                    Thu hồi vĩnh viễn
                                   </button>
                                 )}
                             </td>

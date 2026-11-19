@@ -123,7 +123,7 @@ export default function HomePage() {
           <div className="flex items-center gap-2.5">
             <Link
               href="/verify"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 md:hidden"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 md:hidden"
             >
               <i className="fa-solid fa-shield-halved text-[11px]"></i>
               <span>Xác thực</span>
@@ -132,7 +132,7 @@ export default function HomePage() {
             {username ? (
               <Link
                 href={workspaceHref}
-                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-indigo-700"
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-indigo-700"
               >
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-[10px]">
                   <i className="fa-solid fa-user"></i>
@@ -144,13 +144,13 @@ export default function HomePage() {
               <>
                 <Link
                   href="/register"
-                  className="hidden rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-indigo-700 sm:inline-flex"
+                  className="hidden rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-indigo-700 sm:inline-flex"
                 >
                   Đăng ký tổ chức
                 </Link>
                 <Link
                   href="/login"
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-indigo-600"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-indigo-600"
                 >
                   <span>Đăng nhập</span>
                   <i className="fa-solid fa-arrow-right text-[11px]"></i>
@@ -175,7 +175,7 @@ export default function HomePage() {
                 Hệ thống Chữ ký số PKI
               </div>
 
-              <h1 className="mb-5 text-4xl font-black leading-[1.12] tracking-tight text-slate-900 sm:text-5xl xl:text-6xl">
+              <h1 className="mb-5 text-4xl font-semibold text-slate-900 sm:text-5xl xl:text-6xl">
                 Ký Kết Tài Liệu <br />
                 <span className="bg-linear-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
                   Bảo Mật Tuyệt Đối
@@ -191,7 +191,7 @@ export default function HomePage() {
               <div className="flex flex-col items-center justify-center gap-3.5 sm:flex-row lg:justify-start">
                 <Link
                   href={username ? workspaceHref : "/login"}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-7 py-3.5 text-sm font-bold text-white  hover:-translate-y-0.5 hover:bg-indigo-700 sm:w-auto sm:text-base"
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-7 py-3.5 text-sm font-bold text-white  hover:-translate-y-0.5 hover:bg-indigo-700 sm:w-auto sm:text-base"
                 >
                   <span>Bắt đầu ký ngay</span>
                   <i className="fa-solid fa-arrow-right text-xs"></i>
@@ -199,7 +199,7 @@ export default function HomePage() {
 
                 <Link
                   href="/verify"
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-7 py-3.5 text-sm font-bold text-slate-700 transition hover:border-emerald-300 hover:bg-emerald-50/60 hover:text-emerald-800 sm:w-auto sm:text-base"
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-7 py-3.5 text-sm font-bold text-slate-700 transition hover:border-emerald-300 hover:bg-emerald-50/60 hover:text-emerald-800 sm:w-auto sm:text-base"
                 >
                   <i className="fa-solid fa-shield-halved text-emerald-600"></i>
                   <span>Xác thực văn bằng</span>

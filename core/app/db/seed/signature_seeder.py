@@ -13,7 +13,7 @@ async def seed_signatures(
 ):
     print("✍️ Đang tạo Signatures...")
 
-    giamdoc = users["giamdoc"]
+    tenant_admin = users["group"]
     # Trạng thái mới của schema là ISSUED
     signed_credentials = [
         credential for credential in docs if credential.status == CredentialStatus.ISSUED
@@ -23,7 +23,7 @@ async def seed_signatures(
             credential_id=credential.id,
             key_id=pki_data["user_key"].id,
             certificate_id=pki_data["user_cert"].id,
-            user_id=giamdoc.id,
+            user_id=tenant_admin.id,
             signature_value=b"fake_signature",
             hash_algorithm="SHA-256",
             signature_algorithm="RSA",

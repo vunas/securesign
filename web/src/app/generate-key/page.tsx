@@ -400,7 +400,7 @@ export default function GenerateKeyPage() {
                             ECDSA 256-bit
                           </span>
                           <span className="rounded bg-indigo-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                            NIST P-256 (Khuyên dùng)
+                            NIST P-256
                           </span>
                         </div>
                         <i className="fa-solid fa-circle-check text-indigo-600"></i>
@@ -425,7 +425,7 @@ export default function GenerateKeyPage() {
           <div className="space-y-5 lg:sticky lg:top-8 lg:col-span-5">
             {/* Digital Certificate Preview Card */}
             <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm">
-              <div className="border-b px-5 py-4">
+              <div className="px-5 py-4">
                 <div className="flex items-center justify-between">
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider">
                     <i className="fa-solid fa-certificate"></i>
@@ -435,7 +435,7 @@ export default function GenerateKeyPage() {
                     X.509 v3
                   </span>
                 </div>
-                <p className="mt-2 truncate text-base font-bold">
+                <p className="mt-2 truncate text-base">
                   {trimmedPreviewName
                     ? `Chứng chỉ ${trimmedPreviewName}`
                     : "Chứng chỉ [Chưa đặt tên khóa]"}

@@ -24,7 +24,10 @@ export default function RootLayout({
         />
       </head>
       <body className="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased">
-        <Script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" strategy="beforeInteractive" />
+        <Script
+          src="https://cdn.jsdelivr.net/npm/sweetalert2@11"
+          strategy="afterInteractive"
+        />
         {children}
       </body>
     </html>

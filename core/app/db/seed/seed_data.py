@@ -70,7 +70,7 @@ async def run_seed(force=False):
             await log_service.log_action(
                 db=db,
                 tenant_id=created_users["tenant"].id,
-                user_id=created_users["giamdoc"].id,
+                user_id=created_users["group"].id,
                 action="SEED_DATA",
                 target_type=TargetResourceType.SYSTEM,
                 target_id="seed",

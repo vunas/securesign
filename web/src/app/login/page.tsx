@@ -8,10 +8,34 @@ import OneTimeCredentialsModal, {
 } from "@/components/OneTimeCredentialsModal";
 import { showAlert } from "@/lib/swal";
 
+const DEMO_ACCOUNTS = [
+  {
+    username: "admin",
+    password: "123456",
+    label: "Điền tài khoản Admin mẫu",
+    roleHint: "Quản trị hệ thống",
+    icon: "fa-solid fa-shield-halved",
+  },
+  {
+    username: "group",
+    password: "123456",
+    label: "Điền tài khoản Group mẫu",
+    roleHint: "Quản lý tổ chức",
+    icon: "fa-solid fa-building-user",
+  },
+  {
+    username: "demo",
+    password: "123456",
+    label: "Điền tài khoản Demo mẫu",
+    roleHint: "Trải nghiệm ký số",
+    icon: "fa-solid fa-file-signature",
+  },
+] as const;
+
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("demo");
+  const [password, setPassword] = useState("123456");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [initialCredentials, setInitialCredentials] =
@@ -23,6 +47,11 @@ export default function LoginPage() {
         ? "/admin/tenants"
         : "/dashboard",
     );
+  };
+
+  const handleFillDemoAccount = (accUsername: string, accPassword: string) => {
+    setUsername(accUsername);
+    setPassword(accPassword);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -163,7 +192,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <div className="mx-auto my-auto w-full max-w-md py-10">
+        <div className="mx-auto my-auto w-full max-w-md py-8">
           <div className="mb-6 flex items-center gap-2.5 lg:hidden">
             <div className="rounded-xl bg-linear-to-tr from-blue-600 to-indigo-600 p-2 text-white">
               <i className="fa-solid fa-file-signature text-base"></i>
@@ -182,7 +211,7 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+          <form onSubmit={handleSubmit} className="mt-7 space-y-4">
             <div>
               <label
                 htmlFor="username"
@@ -263,14 +292,70 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-8 rounded-xl border border-slate-100 bg-slate-50/70 p-4 text-center text-xs text-slate-600">
-            Tổ chức của bạn chưa tham gia nền tảng?{" "}
-            <Link
-              href="/register"
-              className="font-bold text-indigo-600 hover:text-indigo-800 hover:underline"
-            >
-              Đăng ký tổ chức phát hành
-            </Link>
+          {/* QUICK DEMO ACCOUNTS SECTION */}
+          <div className="mt-7">
+            <div className="relative flex items-center">
+              <div className="grow border-t border-slate-200/80" />
+              <span className="mx-3 shrink text-[11px] font-bold uppercase tracking-widest text-slate-400">
+                Khám phá giao diện
+              </span>
+              <div className="grow border-t border-slate-200/80" />
+            </div>
+
+            <p className="mt-2.5 text-center text-xs text-slate-500">
+              Chọn nhanh tài khoản mẫu theo từng vai trò trải nghiệm.
+            </p>
+
+            <div className="mt-3.5 space-y-2">
+              {DEMO_ACCOUNTS.map((acc) => {
+                const isSelected = username.trim() === acc.username;
+                return (
+                  <button
+                    key={acc.username}
+                    type="button"
+                    disabled={loading}
+                    onClick={() =>
+                      handleFillDemoAccount(acc.username, acc.password)
+                    }
+                    className={`group flex w-full items-center justify-between rounded-xl border px-3.5 py-2.5 text-left transition cursor-pointer disabled:opacity-60 ${
+                      isSelected
+                        ? "border-indigo-300 bg-indigo-50/60 text-indigo-900 ring-1 ring-indigo-500/15"
+                        : "border-slate-200/90 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50/80"
+                    }`}
+                  >
+                    <span className="flex items-center gap-3">
+                      <span
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs transition ${
+                          isSelected
+                            ? "bg-indigo-600 text-white"
+                            : "bg-slate-100 text-slate-500 group-hover:bg-white group-hover:text-indigo-600"
+                        }`}
+                      >
+                        <i className={acc.icon}></i>
+                      </span>
+                      <span className="text-xs font-semibold">{acc.label}</span>
+                    </span>
+
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={`hidden rounded-md px-2 py-0.5 text-[10px] font-semibold sm:inline-block ${
+                          isSelected
+                            ? "bg-indigo-100 text-indigo-700"
+                            : "bg-slate-100 text-slate-500"
+                        }`}
+                      >
+                        {acc.roleHint}
+                      </span>
+                      <i
+                        className={`fa-solid fa-arrow-right text-[11px] transition-transform group-hover:translate-x-0.5 ${
+                          isSelected ? "text-indigo-600" : "text-slate-400"
+                        }`}
+                      ></i>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 

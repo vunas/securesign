@@ -106,7 +106,7 @@ class TenantService:
                     period_end=period_end,
                 )
             )
-            root_certificate = await certificate_service.get_root_ca(db)
+            root_certificate = await certificate_service.get_root_ca(db, tenant.id)
             if root_certificate is None:
                 root_key = await key_service.create_key(
                     db,
