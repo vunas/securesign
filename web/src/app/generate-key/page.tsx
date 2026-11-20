@@ -1,17 +1,13 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import {
-  fetchAPI,
-  fetchUserProfile,
-  getCurrentRole,
-  getCurrentTenantName,
-  getCurrentUsername,
-} from "@/lib/api";
+import { fetchAPI } from "@/lib/api";
 import { showAlert } from "@/lib/swal";
+import { useClientSession } from "@/lib/hooks/use-client-session";
+import DataSkeleton from "@/components/DataSkeleton";
 
 interface CreatedKey {
   id: number;
@@ -20,69 +16,23 @@ interface CreatedKey {
 
 type AlgorithmType = "RSA" | "ECDSA";
 
-const emptySubscribe = () => () => {};
-
 const QUICK_KEY_SUGGESTIONS = [
   "Chữ ký hợp đồng 2026",
   "Chữ ký tổ chức",
   "Phê duyệt văn bằng chứng chỉ",
 ];
 
-export default function GenerateKeyPage() {
+export default function GenerateKeyClient() {
+  const { user, isReady } = useClientSession("TENANT_ADMIN");
   const router = useRouter();
   const [keyName, setKeyName] = useState("");
   const [algorithm, setAlgorithm] = useState<AlgorithmType>("RSA");
   const [keySize, setKeySize] = useState<number>(2048);
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState("");
+  const tenantName = user?.tenant_name ?? "";
 
-  const initialTenantName = useSyncExternalStore(
-    emptySubscribe,
-    () => getCurrentTenantName() || "",
-    () => "",
-  );
-  const [tenantName, setTenantName] = useState(initialTenantName);
-  const [checkingAuth, setCheckingAuth] = useState(true);
-
-  useEffect(() => {
-    if (!getCurrentUsername()) {
-      router.replace("/login");
-      return;
-    }
-
-    const currentRole = getCurrentRole();
-    if (currentRole && currentRole !== "TENANT_ADMIN") {
-      void showAlert(
-        "Từ chối truy cập",
-        "Chỉ Quản trị viên tổ chức (Tenant Admin) mới có quyền khởi tạo khóa và cấp phát chứng thư số.",
-        "error",
-      );
-      router.replace("/sign");
-      return;
-    }
-
-    let isMounted = true;
-    fetchUserProfile().then((profile) => {
-      if (!isMounted) return;
-      if (!profile || profile.role !== "TENANT_ADMIN") {
-        void showAlert(
-          "Từ chối truy cập",
-          "Chỉ Quản trị viên tổ chức (Tenant Admin) mới có quyền khởi tạo khóa và cấp phát chứng thư số.",
-          "error",
-        );
-        router.replace("/sign");
-        return;
-      }
-      if (profile.tenant_name) {
-        setTenantName(profile.tenant_name);
-      }
-      setCheckingAuth(false);
-    });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [router]);
+  if (!isReady) return <DataSkeleton />;
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -93,7 +43,7 @@ export default function GenerateKeyPage() {
     setLoadingStep("Đang sinh cặp khóa mật mã trên máy chủ...");
 
     try {
-      const key = await fetchAPI<CreatedKey>("/api/keys/", "POST", {
+      const key = await fetchAPI<CreatedKey>("/api/keys", "POST", {
         key_name: trimmedName,
         algorithm,
         key_size: algorithm === "RSA" ? keySize : 256,
@@ -102,12 +52,11 @@ export default function GenerateKeyPage() {
 
       setLoadingStep("Đang cấp phát chứng thư số từ Internal CA...");
 
-      const effectiveSubject = tenantName || initialTenantName || trimmedName;
-      await fetchAPI("/api/certificates/", "POST", {
+      await fetchAPI("/api/certificates", "POST", {
         cert_name: `Chứng chỉ ${trimmedName}`,
         key_id: key.id,
         issuer: "SecureSign Internal CA",
-        subject: effectiveSubject,
+        subject: tenantName || trimmedName,
         valid_days: 365,
         cert_type: "end_entity",
       });
@@ -133,21 +82,6 @@ export default function GenerateKeyPage() {
   const trimmedPreviewName = keyName.trim();
   const specLabel =
     algorithm === "RSA" ? `RSA ${keySize}-bit` : "ECDSA P-256 (256-bit)";
-
-  if (checkingAuth) {
-    return (
-      <div className="flex min-h-screen flex-col bg-slate-50/80">
-        <Navbar />
-        <main className="mx-auto flex w-full max-w-6xl grow items-center justify-center px-4 py-20">
-          <div className="flex flex-col items-center gap-3 text-slate-500">
-            <i className="fa-solid fa-circle-notch fa-spin text-2xl text-indigo-600"></i>
-            <span className="text-sm font-medium">Đang xác thực quyền quản trị tổ chức...</span>
-          </div>
-        </main>
-        <Footer />
-      </div>
-    );
-  }
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50/80">
@@ -447,9 +381,9 @@ export default function GenerateKeyPage() {
                   <span className="text-slate-500">Chủ thể (Subject)</span>
                   <span
                     className="max-w-[60%] truncate font-semibold text-slate-900"
-                    title={tenantName || initialTenantName || "Tổ chức chưa xác định"}
+                    title={tenantName || "Tổ chức chưa xác định"}
                   >
-                    {tenantName || initialTenantName || "Tổ chức chưa xác định"}
+                    {tenantName || "Tổ chức chưa xác định"}
                   </span>
                 </div>
 

@@ -1,13 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { fetchAPI, getCurrentUsername } from "@/lib/api";
+import { fetchAPI } from "@/lib/api";
 import { getSwal, showAlert, showConfirm, showToast } from "@/lib/swal";
+import { useClientSession } from "@/lib/hooks/use-client-session";
+import { useUrlSearchParams } from "@/lib/hooks/use-url-search-params";
+import DataSkeleton from "@/components/DataSkeleton";
 
-interface Tenant {
+export interface Tenant {
   id: number;
   tenant_code: string;
   name: string;
@@ -47,10 +49,20 @@ const STATUS_META: Record<
 
 const QUOTA_PRESETS = [500, 1000, 5000, 10000];
 
-export default function TenantApprovalPage() {
-  const router = useRouter();
+export default function TenantApprovalClient() {
+  const { isReady } = useClientSession("PLATFORM_SUPER_ADMIN");
+  const { searchParams, setSearchParam } = useUrlSearchParams();
   const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [statusFilter, setStatusFilter] = useState<"" | Tenant["status"]>("");
+  const statusParam = searchParams.get("status");
+  const statusFilter: "" | Tenant["status"] =
+    statusParam === "PENDING" ||
+    statusParam === "ACTIVE" ||
+    statusParam === "REJECTED" ||
+    statusParam === "SUSPENDED"
+      ? statusParam
+      : "";
+  const setStatusFilter = (status: "" | Tenant["status"]) =>
+    setSearchParam("status", status || null, "replace");
   const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -75,40 +87,28 @@ export default function TenantApprovalPage() {
   }, []);
 
   useEffect(() => {
-    if (!getCurrentUsername()) {
-      router.replace("/login");
-      return;
-    }
-    if (localStorage.getItem("role") !== "PLATFORM_SUPER_ADMIN") {
-      router.replace("/dashboard");
-      return;
-    }
-
-    let isMounted = true;
-    fetchAPI<Tenant[]>("/api/admin/tenants")
+    if (!isReady) return;
+    let active = true;
+    void fetchAPI<Tenant[]>("/api/admin/tenants")
       .then((data) => {
-        if (isMounted) {
-          setTenants(data || []);
-          setError("");
-        }
+        if (active) setTenants(data || []);
       })
       .catch((cause: unknown) => {
-        if (isMounted) {
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "Không thể tải danh sách tổ chức.",
-          );
-        }
+        if (!active) return;
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Không thể tải danh sách tổ chức.",
+        );
       })
       .finally(() => {
-        if (isMounted) setLoading(false);
+        if (active) setLoading(false);
       });
 
     return () => {
-      isMounted = false;
+      active = false;
     };
-  }, [router]);
+  }, [isReady]);
 
   const counts = useMemo(() => {
     return {
@@ -133,6 +133,8 @@ export default function TenantApprovalPage() {
       );
     });
   }, [tenants, statusFilter, searchQuery]);
+
+  if (!isReady || loading) return <DataSkeleton />;
 
   const copyTenantCode = (code: string) => {
     void navigator.clipboard?.writeText(code);

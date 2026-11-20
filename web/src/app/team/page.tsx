@@ -1,13 +1,15 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { fetchAPI, getCurrentUsername } from "@/lib/api";
+import { fetchAPI } from "@/lib/api";
 import { showToast } from "@/lib/swal";
+import { useClientSession } from "@/lib/hooks/use-client-session";
+import { useUrlSearchParams } from "@/lib/hooks/use-url-search-params";
+import DataSkeleton from "@/components/DataSkeleton";
 
-interface TenantUser {
+export interface TenantUser {
   id: number;
   username: string;
   email: string | null;
@@ -17,8 +19,9 @@ interface TenantUser {
   created_at: string;
 }
 
-export default function TeamPage() {
-  const router = useRouter();
+export default function TeamClient() {
+  const { isReady } = useClientSession("TENANT_ADMIN");
+  const { searchParams, setSearchParam } = useUrlSearchParams();
   const [users, setUsers] = useState<TenantUser[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [error, setError] = useState("");
@@ -26,9 +29,13 @@ export default function TeamPage() {
   const [showPassword, setShowPassword] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "LOCKED">(
-    "ALL",
-  );
+  const statusParam = searchParams.get("status");
+  const statusFilter: "ALL" | "ACTIVE" | "LOCKED" =
+    statusParam === "ACTIVE" || statusParam === "LOCKED"
+      ? statusParam
+      : "ALL";
+  const setStatusFilter = (status: "ALL" | "ACTIVE" | "LOCKED") =>
+    setSearchParam("status", status === "ALL" ? null : status, "replace");
   const [togglingUserId, setTogglingUserId] = useState<number | null>(null);
 
   const [form, setForm] = useState({
@@ -39,8 +46,9 @@ export default function TeamPage() {
   });
 
   const loadUsers = useCallback(async () => {
+    setLoadingList(true);
     try {
-      setUsers(await fetchAPI<TenantUser[]>("/api/tenant/users/"));
+      setUsers(await fetchAPI<TenantUser[]>("/api/tenant/users"));
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Không thể tải nhân sự.",
@@ -51,23 +59,35 @@ export default function TeamPage() {
   }, []);
 
   useEffect(() => {
-    if (!getCurrentUsername()) {
-      router.replace("/login");
-      return;
-    }
-    if (localStorage.getItem("role") !== "TENANT_ADMIN") {
-      router.replace("/dashboard");
-      return;
-    }
-    void Promise.resolve().then(loadUsers);
-  }, [loadUsers, router]);
+    if (!isReady) return;
+    let active = true;
+    void fetchAPI<TenantUser[]>("/api/tenant/users")
+      .then((items) => {
+        if (active) setUsers(items);
+      })
+      .catch((cause: unknown) => {
+        if (!active) return;
+        setError(
+          cause instanceof Error ? cause.message : "Không thể tải nhân sự.",
+        );
+      })
+      .finally(() => {
+        if (active) setLoadingList(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isReady]);
+
+  if (!isReady || loadingList) return <DataSkeleton />;
 
   const createUser = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLoading(true);
     setError("");
     try {
-      await fetchAPI("/api/tenant/users/", "POST", form);
+      await fetchAPI("/api/tenant/users", "POST", form);
       setForm({ username: "", full_name: "", email: "", password: "" });
       showToast("Đã tạo tài khoản nhân viên", "success");
       await loadUsers();
