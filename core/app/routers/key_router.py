@@ -10,7 +10,8 @@ from app.services.key_service import key_service
 router = APIRouter(prefix="/api/keys", tags=["Keys"])
 
 
-@router.post("/", response_model=KeyResponse)
+@router.post("/", response_model=KeyResponse, include_in_schema=False)
+@router.post("", response_model=KeyResponse)
 async def generate_new_key(
     key_data: KeyCreate,
     db: DatabaseDep,
@@ -22,7 +23,8 @@ async def generate_new_key(
     )
 
 
-@router.get("/", response_model=List[KeyResponse])
+@router.get("/", response_model=List[KeyResponse], include_in_schema=False)
+@router.get("", response_model=List[KeyResponse])
 async def get_my_keys(db: DatabaseDep, current_user: ActiveTenantUserDep):
     """Lấy danh sách khóa có chứng thư ký văn bằng còn hiệu lực."""
     if current_user.tenant_id is None:

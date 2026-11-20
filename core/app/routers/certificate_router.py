@@ -9,7 +9,8 @@ from app.services.certificate_service import certificate_service
 router = APIRouter(prefix="/api/certificates", tags=["Certificates"])
 
 
-@router.post("/", response_model=CertificateResponse)
+@router.post("/", response_model=CertificateResponse, include_in_schema=False)
+@router.post("", response_model=CertificateResponse)
 async def create_certificate(
     cert_data: CertificateCreate,
     db: DatabaseDep,

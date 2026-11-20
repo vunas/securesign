@@ -102,7 +102,8 @@ async def issue_credential(
     )
 
 
-@router.get("/", response_model=list[CredentialResponse])
+@router.get("/", response_model=list[CredentialResponse], include_in_schema=False)
+@router.get("", response_model=list[CredentialResponse])
 async def get_my_credentials(db: DatabaseDep, current_user: ActiveTenantUserDep):
     return await credential_repo.get_all_by_tenant(db, current_user.tenant_id)
 
