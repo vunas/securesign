@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { fetchAPI, getCurrentUsername } from "@/lib/api";
+import { fetchAPI } from "@/lib/api";
 import { showToast } from "@/lib/swal";
+import { useClientSession } from "@/lib/hooks/use-client-session";
+import DataSkeleton from "@/components/DataSkeleton";
 
-interface ApiKey {
+export interface ApiKey {
   id: number;
   name: string;
   key_prefix: string;
@@ -22,10 +23,11 @@ interface ApiKeyCreated extends ApiKey {
   secret: string;
 }
 
-export default function ApiKeysPage() {
-  const router = useRouter();
+export default function ApiKeysClient() {
+  const { isReady } = useClientSession("TENANT_ADMIN");
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [creating, setCreating] = useState(false);
 
   const [name, setName] = useState("");
@@ -39,28 +41,39 @@ export default function ApiKeysPage() {
   const [revoking, setRevoking] = useState(false);
 
   const loadKeys = useCallback(async () => {
-    const items = await fetchAPI<ApiKey[]>("/api/api-keys");
-    setKeys(items);
+    setLoading(true);
+    setLoadError("");
+    try {
+      const items = await fetchAPI<ApiKey[]>("/api/api-keys");
+      setKeys(items);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    if (!getCurrentUsername()) {
-      router.replace("/login");
-      return;
-    }
+    if (!isReady) return;
     let active = true;
-    fetchAPI<ApiKey[]>("/api/api-keys")
+    void fetchAPI<ApiKey[]>("/api/api-keys")
       .then((items) => {
         if (active) setKeys(items);
       })
-      .catch(() => undefined)
+      .catch((cause: unknown) => {
+        if (!active) return;
+        setLoadError(
+          cause instanceof Error ? cause.message : "Không thể tải API keys.",
+        );
+      })
       .finally(() => {
         if (active) setLoading(false);
       });
+
     return () => {
       active = false;
     };
-  }, [router]);
+  }, [isReady]);
+
+  if (!isReady || loading) return <DataSkeleton />;
 
   const createKey = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -128,6 +141,29 @@ export default function ApiKeysPage() {
       <Navbar />
 
       <main className="mx-auto w-full max-w-7xl grow px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        {loadError && (
+          <div
+            role="alert"
+            className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+          >
+            <span>{loadError}</span>
+            <button
+              type="button"
+              onClick={() =>
+                void loadKeys().catch((cause: unknown) =>
+                  setLoadError(
+                    cause instanceof Error
+                      ? cause.message
+                      : "Không thể tải API keys.",
+                  ),
+                )
+              }
+              className="font-semibold underline"
+            >
+              Thử lại
+            </button>
+          </div>
+        )}
         {/* Page Header */}
         <div className="mb-6 flex flex-col justify-between gap-4 border-b border-slate-200/80 pb-5 sm:flex-row sm:items-center">
           <div className="flex items-center gap-3.5">
@@ -145,14 +181,17 @@ export default function ApiKeysPage() {
                 </span>
               </div>
               <p className="mt-0.5 text-sm text-slate-600">
-                Cấp phát và thu hồi khóa tích hợp tự động từ hệ thống LMS, SIS hoặc ERP của tổ chức.
+                Cấp phát và thu hồi khóa tích hợp tự động từ hệ thống LMS, SIS
+                hoặc ERP của tổ chức.
               </p>
             </div>
           </div>
 
           <div className="self-start rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-600 sm:self-auto">
             Đang hoạt động:{" "}
-            <strong className="font-bold text-emerald-700">{activeCount}</strong>{" "}
+            <strong className="font-bold text-emerald-700">
+              {activeCount}
+            </strong>{" "}
             / {keys.length} khóa
           </div>
         </div>
@@ -164,7 +203,9 @@ export default function ApiKeysPage() {
               <div className="space-y-1">
                 <div className="flex items-center gap-2 text-sm font-bold text-amber-900">
                   <i className="fa-solid fa-triangle-exclamation text-amber-600"></i>
-                  <span>Lưu API Secret ngay bây giờ — Hệ thống không hiển thị lại</span>
+                  <span>
+                    Lưu API Secret ngay bây giờ — Hệ thống không hiển thị lại
+                  </span>
                 </div>
                 <p className="text-xs text-amber-800">
                   Truyền giá trị này vào HTTP Header{" "}
@@ -229,7 +270,8 @@ export default function ApiKeysPage() {
                   htmlFor="apiKeyName"
                   className="mb-1.5 block text-xs font-semibold text-slate-700"
                 >
-                  Tên định danh ứng dụng <span className="text-rose-500">*</span>
+                  Tên định danh ứng dụng{" "}
+                  <span className="text-rose-500">*</span>
                 </label>
                 <input
                   id="apiKeyName"
@@ -250,7 +292,8 @@ export default function ApiKeysPage() {
                     htmlFor="rateLimit"
                     className="mb-1.5 block text-xs font-semibold text-slate-700"
                   >
-                    Giới hạn (req / phút) <span className="text-rose-500">*</span>
+                    Giới hạn (req / phút){" "}
+                    <span className="text-rose-500">*</span>
                   </label>
                   <input
                     id="rateLimit"
@@ -273,7 +316,9 @@ export default function ApiKeysPage() {
                     className="mb-1.5 block text-xs font-semibold text-slate-700"
                   >
                     Ngày hết hạn{" "}
-                    <span className="font-normal text-slate-400">(Tùy chọn)</span>
+                    <span className="font-normal text-slate-400">
+                      (Tùy chọn)
+                    </span>
                   </label>
                   <input
                     id="expiresAt"
@@ -463,7 +508,8 @@ export default function ApiKeysPage() {
             <div className="p-6">
               <p className="text-xs leading-relaxed text-slate-600">
                 Bạn có chắc chắn muốn vô hiệu hóa vĩnh viễn khóa{" "}
-                <strong className="text-slate-900">{revokeTarget.name}</strong> (
+                <strong className="text-slate-900">{revokeTarget.name}</strong>{" "}
+                (
                 <code className="font-mono text-slate-800">
                   {revokeTarget.key_prefix}...
                 </code>

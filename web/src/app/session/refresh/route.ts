@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getInternalApiUrl } from "@/lib/server/auth";
+import { getInternalApiUrl } from "@/lib/server/api-url";
 
 function getSafeReturnPath(request: NextRequest): string {
   const returnPath = request.nextUrl.searchParams.get("next");
@@ -14,7 +14,9 @@ function getSafeReturnPath(request: NextRequest): string {
 }
 
 function redirectToLogin(request: NextRequest): NextResponse {
-  const response = NextResponse.redirect(new URL("/login?session=expired", request.url));
+  const response = NextResponse.redirect(
+    new URL("/login?session=expired", request.url),
+  );
   response.cookies.delete("access_token");
   response.cookies.delete("refresh_token");
   return response;

@@ -1,25 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { fetchAPI, getCurrentUsername } from "@/lib/api";
+import { fetchAPI } from "@/lib/api";
 import { getSwal, showToast } from "@/lib/swal";
-
-function subscribeAuth(callback: () => void) {
-  window.addEventListener("storage", callback);
-  window.addEventListener("securesign:auth-changed", callback);
-  return () => {
-    window.removeEventListener("storage", callback);
-    window.removeEventListener("securesign:auth-changed", callback);
-  };
-}
-
-function getRoleSnapshot() {
-  return typeof window === "undefined" ? null : localStorage.getItem("role");
-}
+import { useClientSession } from "@/lib/hooks/use-client-session";
+import { useUrlSearchParams } from "@/lib/hooks/use-url-search-params";
+import DataSkeleton from "@/components/DataSkeleton";
 
 interface AuditLog {
   id: number;
@@ -277,33 +266,129 @@ function buildAuditDetailElement(log: AuditLog): HTMLElement {
   return root;
 }
 
-export default function LogPage() {
-  const router = useRouter();
-  const role = useSyncExternalStore(subscribeAuth, getRoleSnapshot, () => null);
-
-  const [activeTab, setActiveTab] = useState<"audit" | "verify">("audit");
+export default function LogClient() {
+  const { user, isReady } = useClientSession();
+  const { searchParams, setSearchParam, setSearchParams } =
+    useUrlSearchParams();
+  const role = user?.role ?? null;
+  const activeTab = searchParams.get("tab") === "verify" ? "verify" : "audit";
+  const setActiveTab = (tab: "audit" | "verify") =>
+    setSearchParam("tab", tab === "audit" ? null : tab, "push");
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [verifyLogs, setVerifyLogs] = useState<VerifyLog[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Audit Filters
-  const [actionFilter, setActionFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [auditSince, setAuditSince] = useState("");
-  const [auditUntil, setAuditUntil] = useState("");
-  const [auditLimit, setAuditLimit] = useState("50");
+  const actionFilter = searchParams.get("action") ?? "";
+  const setActionFilter = (value: string) =>
+    setSearchParam("action", value || null);
+  const statusFilter = searchParams.get("status") ?? "";
+  const setStatusFilter = (value: string) =>
+    setSearchParam("status", value || null);
+  const auditSince = searchParams.get("since") ?? "";
+  const setAuditSince = (value: string) =>
+    setSearchParam("since", value || null);
+  const auditUntil = searchParams.get("until") ?? "";
+  const setAuditUntil = (value: string) =>
+    setSearchParam("until", value || null);
+  const auditLimitParam = searchParams.get("limit");
+  const auditLimit =
+    auditLimitParam === "100" || auditLimitParam === "200"
+      ? auditLimitParam
+      : "50";
+  const setAuditLimit = (value: string) =>
+    setSearchParam("limit", value === "50" ? null : value);
 
   // Verify Filters
-  const [validFilter, setValidFilter] = useState<"" | "true" | "false">("");
-  const [verifySince, setVerifySince] = useState("");
-  const [verifyUntil, setVerifyUntil] = useState("");
-  const [verifyLimit, setVerifyLimit] = useState("50");
+  const validParam = searchParams.get("valid");
+  const validFilter: "" | "true" | "false" =
+    validParam === "true" || validParam === "false" ? validParam : "";
+  const setValidFilter = (value: "" | "true" | "false") =>
+    setSearchParam("valid", value || null);
+  const verifySince = searchParams.get("verifySince") ?? "";
+  const setVerifySince = (value: string) =>
+    setSearchParam("verifySince", value || null);
+  const verifyUntil = searchParams.get("verifyUntil") ?? "";
+  const setVerifyUntil = (value: string) =>
+    setSearchParam("verifyUntil", value || null);
+  const verifyLimitParam = searchParams.get("verifyLimit");
+  const verifyLimit =
+    verifyLimitParam === "100" || verifyLimitParam === "200"
+      ? verifyLimitParam
+      : "50";
+  const setVerifyLimit = (value: string) =>
+    setSearchParam("verifyLimit", value === "50" ? null : value);
 
   // Integrity Chain & Copy Feedback
   const [checkingChain, setCheckingChain] = useState(false);
   const [integrityResult, setIntegrityResult] =
     useState<AuditIntegrityResult | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    if (!isReady) return;
+    let active = true;
+    const params = new URLSearchParams(window.location.search);
+    const initialTab = params.get("tab") === "verify" ? "verify" : "audit";
+    const initialQuery = new URLSearchParams();
+    const initialLimit =
+      initialTab === "verify"
+        ? params.get("verifyLimit")
+        : params.get("limit");
+    initialQuery.set(
+      "limit",
+      initialLimit === "100" || initialLimit === "200" ? initialLimit : "50",
+    );
+
+    if (initialTab === "audit") {
+      for (const key of ["action", "status"] as const) {
+        const value = params.get(key);
+        if (value) initialQuery.set(key, value);
+      }
+      const since = params.get("since");
+      const until = params.get("until");
+      if (since) initialQuery.set("since", toIsoBoundary(since, false));
+      if (until) initialQuery.set("until", toIsoBoundary(until, true));
+    } else {
+      const valid = params.get("valid");
+      const since = params.get("verifySince");
+      const until = params.get("verifyUntil");
+      if (valid === "true" || valid === "false") {
+        initialQuery.set("valid", valid);
+      }
+      if (since) initialQuery.set("since", toIsoBoundary(since, false));
+      if (until) initialQuery.set("until", toIsoBoundary(until, true));
+    }
+
+    const endpoint =
+      initialTab === "audit" ? "/api/logs/audit" : "/api/logs/verify";
+    const loadInitialLogs = async () => {
+      if (initialTab === "audit") {
+        const logs = await fetchAPI<AuditLog[]>(`${endpoint}?${initialQuery}`);
+        if (active) setAuditLogs(logs);
+      } else {
+        const logs = await fetchAPI<VerifyLog[]>(`${endpoint}?${initialQuery}`);
+        if (active) setVerifyLogs(logs);
+      }
+    };
+
+    void loadInitialLogs()
+      .catch((cause: unknown) => {
+        if (!active) return;
+        const message =
+          cause instanceof Error ? cause.message : "Không thể tải nhật ký.";
+        setLoadError(message);
+        showToast(message, "error");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isReady]);
 
   const canManageAdminLogs =
     role === "PLATFORM_SUPER_ADMIN" || role === "TENANT_ADMIN";
@@ -370,34 +455,33 @@ export default function LogPage() {
     }
   };
 
-  const buildAuditQueryParams = useCallback(
-    (includeLimit = true) => {
-      const params = new URLSearchParams();
-      if (includeLimit) params.set("limit", auditLimit);
-      if (actionFilter) params.set("action", actionFilter);
-      if (statusFilter) params.set("status", statusFilter);
-      if (auditSince) params.set("since", toIsoBoundary(auditSince, false));
-      if (auditUntil) params.set("until", toIsoBoundary(auditUntil, true));
-      return params;
-    },
-    [actionFilter, statusFilter, auditSince, auditUntil, auditLimit],
-  );
+  const buildAuditQueryParams = (includeLimit = true) => {
+    const params = new URLSearchParams();
+    if (includeLimit) params.set("limit", auditLimit);
+    if (actionFilter) params.set("action", actionFilter);
+    if (statusFilter) params.set("status", statusFilter);
+    if (auditSince) params.set("since", toIsoBoundary(auditSince, false));
+    if (auditUntil) params.set("until", toIsoBoundary(auditUntil, true));
+    return params;
+  };
 
-  const loadAuditLogs = useCallback(async () => {
+  const loadAuditLogs = async () => {
     setLoading(true);
     try {
       const params = buildAuditQueryParams(true);
       const data = await fetchAPI<AuditLog[]>(`/api/logs/audit?${params}`);
       setAuditLogs(data || []);
     } catch (e) {
-      console.error("Lỗi tải Audit logs:", e);
-      showToast("Không thể tải nhật ký hoạt động", "error");
+      const message =
+        e instanceof Error ? e.message : "Không thể tải nhật ký hoạt động.";
+      setLoadError(message);
+      showToast(message, "error");
     } finally {
       setLoading(false);
     }
-  }, [buildAuditQueryParams]);
+  };
 
-  const loadVerifyLogs = useCallback(async () => {
+  const loadVerifyLogs = async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ limit: verifyLimit });
@@ -407,37 +491,14 @@ export default function LogPage() {
       const data = await fetchAPI<VerifyLog[]>(`/api/logs/verify?${params}`);
       setVerifyLogs(data || []);
     } catch (e) {
-      console.error("Lỗi tải Verify logs:", e);
-      showToast("Không thể tải lịch sử xác thực", "error");
+      const message =
+        e instanceof Error ? e.message : "Không thể tải lịch sử xác thực.";
+      setLoadError(message);
+      showToast(message, "error");
     } finally {
       setLoading(false);
     }
-  }, [validFilter, verifySince, verifyUntil, verifyLimit]);
-
-  useEffect(() => {
-    let isMounted = true;
-    const user = getCurrentUsername();
-    if (!user) {
-      router.push("/login");
-      return;
-    }
-    fetchAPI<AuditLog[]>("/api/logs/audit?limit=50")
-      .then((data) => {
-        if (isMounted) {
-          setAuditLogs(data || []);
-          setLoading(false);
-        }
-      })
-      .catch((e) => {
-        if (isMounted) {
-          console.error("Lỗi tải Audit logs:", e);
-          setLoading(false);
-        }
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, [router]);
+  };
 
   const handleTabChange = (tab: "audit" | "verify") => {
     setActiveTab(tab);
@@ -449,27 +510,51 @@ export default function LogPage() {
   };
 
   const resetAuditFilters = () => {
-    setActionFilter("");
-    setStatusFilter("");
-    setAuditSince("");
-    setAuditUntil("");
-    setAuditLimit("50");
+    setSearchParams(
+      {
+        action: null,
+        status: null,
+        since: null,
+        until: null,
+        limit: null,
+      },
+      "replace",
+    );
     setLoading(true);
     fetchAPI<AuditLog[]>("/api/logs/audit?limit=50")
       .then((data) => setAuditLogs(data || []))
+      .catch((cause: unknown) => {
+        const message =
+          cause instanceof Error ? cause.message : "Không thể tải nhật ký.";
+        setLoadError(message);
+        showToast(message, "error");
+      })
       .finally(() => setLoading(false));
   };
 
   const resetVerifyFilters = () => {
-    setValidFilter("");
-    setVerifySince("");
-    setVerifyUntil("");
-    setVerifyLimit("50");
+    setSearchParams(
+      {
+        valid: null,
+        verifySince: null,
+        verifyUntil: null,
+        verifyLimit: null,
+      },
+      "replace",
+    );
     setLoading(true);
     fetchAPI<VerifyLog[]>("/api/logs/verify?limit=50")
       .then((data) => setVerifyLogs(data || []))
+      .catch((cause: unknown) => {
+        const message =
+          cause instanceof Error ? cause.message : "Không thể tải lịch sử.";
+        setLoadError(message);
+        showToast(message, "error");
+      })
       .finally(() => setLoading(false));
   };
+
+  if (!isReady || loading) return <DataSkeleton />;
 
   const renderActionBadge = (action: string) => {
     const meta = ACTION_META[action] || {
@@ -518,6 +603,14 @@ export default function LogPage() {
       <Navbar />
 
       <main className="w-full grow px-4 py-6 sm:px-6 lg:px-8">
+        {loadError && (
+          <div
+            role="alert"
+            className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+          >
+            {loadError}
+          </div>
+        )}
         {/* Top Page Header */}
         <div className="mb-6 flex flex-col justify-between gap-4 border-b border-slate-200/80 pb-5 lg:flex-row lg:items-center">
           <div className="flex items-center gap-3.5">
@@ -1126,7 +1219,7 @@ export default function LogPage() {
                             <i
                               className={`fa-solid ${
                                 log.is_valid
-                                  ? "fa-shield-check"
+                                  ? "fa-check"
                                   : "fa-triangle-exclamation"
                               }`}
                             ></i>
