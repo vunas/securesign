@@ -9,7 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@lottiefiles/dotlottie-react": "^0.22.2",
+    "@lottiefiles/dotlottie-react": "^0.22.3",
     "next": "16.4.6",
     "react": "19.3.1",
     "react-dom": "19.3.1"
@@ -22,7 +22,7 @@
     "@types/react-dom": "^19",
     "eslint": "^10",
     "eslint-config-next": "16.4.6",
-    "postcss": "^8.5.32",
+    "postcss": "^8.5.33",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
