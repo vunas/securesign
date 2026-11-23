@@ -9,8 +9,9 @@ pytestmark = pytest.mark.asyncio
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("endpoint", ["/api/keys", "/api/keys/"])
 async def test_generate_key_endpoint_uses_dependency_overrides(
-    client_full, db_session, override_current_user_full
+    client_full, db_session, override_current_user_full, endpoint
 ):
     # Ensure the overridden current user exists in DB if any code queries it later
     result = await db_session.execute(
@@ -46,7 +47,7 @@ async def test_generate_key_endpoint_uses_dependency_overrides(
         "passphrase": None,
     }
 
-    res = await client_full.post("/api/keys/", json=payload)
+    res = await client_full.post(endpoint, json=payload)
 
     assert res.status_code == 200, res.text
     data = res.json()
@@ -62,8 +63,9 @@ async def test_generate_key_endpoint_uses_dependency_overrides(
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("endpoint", ["/api/keys", "/api/keys/"])
 async def test_generate_key_endpoint_forbidden_for_tenant_operator(
-    client_full, override_current_user_full
+    client_full, override_current_user_full, endpoint
 ):
     from app.models.enums import UserRole
 
@@ -75,5 +77,5 @@ async def test_generate_key_endpoint_forbidden_for_tenant_operator(
         "algorithm": "RSA",
         "passphrase": None,
     }
-    res = await client_full.post("/api/keys/", json=payload)
+    res = await client_full.post(endpoint, json=payload)
     assert res.status_code == 403

@@ -1,4 +1,3 @@
-# ruff: noqa: E402
 from __future__ import annotations
 
 import os
@@ -9,11 +8,6 @@ from unittest.mock import AsyncMock
 import pytest
 import pytest_asyncio
 from dotenv import load_dotenv
-
-load_dotenv()
-os.environ.setdefault("SECRET_KEY", "test-only-secret-key-not-for-production-use")
-os.environ.setdefault("ENCRYPTION_KEY", "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=")
-
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event
@@ -32,6 +26,10 @@ from app.core.dependencies import (
 )
 from app.db.base import Base
 from app.models.enums import CredentialStatus, UserRole
+
+load_dotenv()
+os.environ.setdefault("SECRET_KEY", "test-only-secret-key-not-for-production-use")
+os.environ.setdefault("ENCRYPTION_KEY", "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=")
 
 
 @pytest_asyncio.fixture()
@@ -74,6 +72,22 @@ async def db_session(pg_engine: AsyncEngine) -> AsyncGenerator[AsyncSession, Non
         if outer_transaction.is_active:
             await outer_transaction.rollback()
         await connection.close()
+
+
+@pytest_asyncio.fixture()
+async def sqlite_db_session() -> AsyncGenerator[AsyncSession, None]:
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    db = session_factory()
+    try:
+        yield db
+    finally:
+        await db.close()
+        await engine.dispose()
 
 
 @pytest.fixture()
