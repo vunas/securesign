@@ -2,8 +2,6 @@
 
 import { Suspense, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
 import { showAlert } from "@/lib/swal";
 
 interface SignerInfo {
@@ -478,8 +476,7 @@ function VerifyPageContent() {
 
 export default function VerifyPage() {
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50/80">
-      <Navbar />
+    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col bg-slate-50/80">
       <Suspense
         fallback={
           <main className="mx-auto w-full max-w-6xl grow px-4 py-12 text-center text-sm text-slate-500">
@@ -490,7 +487,6 @@ export default function VerifyPage() {
       >
         <VerifyPageContent />
       </Suspense>
-      <Footer />
     </div>
   );
 }

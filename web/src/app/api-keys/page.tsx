@@ -1,8 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
 import { fetchAPI } from "@/lib/api";
 import { showToast } from "@/lib/swal";
 import { useClientSession } from "@/lib/hooks/use-client-session";
@@ -137,9 +135,7 @@ export default function ApiKeysClient() {
   const activeCount = keys.filter((k) => k.is_active).length;
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50/80">
-      <Navbar />
-
+    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col bg-slate-50/80">
       <main className="mx-auto w-full max-w-7xl grow px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         {loadError && (
           <div
@@ -545,8 +541,6 @@ export default function ApiKeysClient() {
           </div>
         </div>
       )}
-
-      <Footer />
     </div>
   );
 }

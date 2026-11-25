@@ -1,10 +1,6 @@
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
-
 export default function DataSkeleton() {
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50/80">
-      <Navbar />
+    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col bg-slate-50/80">
       <main
         aria-label="Đang tải dữ liệu"
         aria-busy="true"
@@ -31,7 +27,6 @@ export default function DataSkeleton() {
         </div>
         <span className="sr-only">Đang tải dữ liệu...</span>
       </main>
-      <Footer />
     </div>
   );
 }
