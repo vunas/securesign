@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import OneTimeCredentialsModal, {
   OneTimeCredentials,
@@ -33,19 +32,17 @@ const DEMO_ACCOUNTS = [
 ] as const;
 
 export default function LoginPage() {
-  const router = useRouter();
   const [username, setUsername] = useState("demo");
   const [password, setPassword] = useState("123456");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [initialCredentials, setInitialCredentials] =
     useState<OneTimeCredentials | null>(null);
+  const [userRole, setUserRole] = useState("");
 
-  const continueToApp = () => {
-    router.push(
-      localStorage.getItem("role") === "PLATFORM_SUPER_ADMIN"
-        ? "/admin/tenants"
-        : "/dashboard",
+  const continueToApp = (role = userRole) => {
+    window.location.assign(
+      role === "PLATFORM_SUPER_ADMIN" ? "/admin/tenants" : "/dashboard",
     );
   };
 
@@ -73,25 +70,11 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (res.ok) {
-        if (typeof window !== "undefined") {
-          localStorage.setItem("username", data.username || username);
-          localStorage.setItem("role", data.role || "");
-          if (data.full_name) {
-            localStorage.setItem("fullName", data.full_name);
-          } else {
-            localStorage.removeItem("fullName");
-          }
-          if (data.tenant_name) {
-            localStorage.setItem("tenantName", data.tenant_name);
-          } else {
-            localStorage.removeItem("tenantName");
-          }
-          window.dispatchEvent(new Event("securesign:auth-changed"));
-        }
+        setUserRole(data.role || "");
         if (data.initial_api_credentials) {
           setInitialCredentials(data.initial_api_credentials);
         } else {
-          continueToApp();
+          continueToApp(data.role || "");
         }
       } else {
         throw new Error(data.detail || "Sai thông tin đăng nhập");

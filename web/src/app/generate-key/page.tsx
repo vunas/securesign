@@ -2,8 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
 import { fetchAPI } from "@/lib/api";
 import { showAlert } from "@/lib/swal";
 import { useClientSession } from "@/lib/hooks/use-client-session";
@@ -84,9 +82,7 @@ export default function GenerateKeyClient() {
     algorithm === "RSA" ? `RSA ${keySize}-bit` : "ECDSA P-256 (256-bit)";
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50/80">
-      <Navbar />
-
+    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col bg-slate-50/80">
       <main className="mx-auto w-full max-w-6xl grow px-4 py-6">
         {/* Top Page Header */}
         <div className="mb-6 flex flex-col justify-between gap-4 border-b border-slate-200/80 pb-5 sm:flex-row sm:items-center">
@@ -340,14 +336,18 @@ export default function GenerateKeyClient() {
                         <i className="fa-solid fa-circle-check text-indigo-600"></i>
                       </div>
                       <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
-                        Đường cong elliptic <strong>secp256r1 (256-bit)</strong>. Tốc độ ký vượt trội, kích thước chữ ký nhỏ gọn, an toàn tương đương RSA 3072.
+                        Đường cong elliptic <strong>secp256r1 (256-bit)</strong>
+                        . Tốc độ ký vượt trội, kích thước chữ ký nhỏ gọn, an
+                        toàn tương đương RSA 3072.
                       </p>
                     </button>
                   </div>
                   <div className="flex items-start gap-2.5 rounded-xl border border-emerald-200/80 bg-emerald-50/50 p-3 text-xs text-slate-700">
                     <i className="fa-solid fa-circle-info mt-0.5 text-emerald-600 shrink-0"></i>
                     <span>
-                      ECDSA 256-bit tuân thủ chuẩn ký số hiện đại FIPS 186-4 và tương thích đầy đủ với Adobe Acrobat và cơ chế nhúng chữ ký PAdES.
+                      ECDSA 256-bit tuân thủ chuẩn ký số hiện đại FIPS 186-4 và
+                      tương thích đầy đủ với Adobe Acrobat và cơ chế nhúng chữ
+                      ký PAdES.
                     </span>
                   </div>
                 </div>
@@ -450,8 +450,6 @@ export default function GenerateKeyClient() {
           </div>
         </form>
       </main>
-
-      <Footer />
     </div>
   );
 }

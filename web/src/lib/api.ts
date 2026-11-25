@@ -104,37 +104,11 @@ export async function forceLogout() {
     localStorage.removeItem('role');
     localStorage.removeItem('fullName');
     localStorage.removeItem('tenantName');
-    window.dispatchEvent(new Event('securesign:auth-changed'));
+    window.dispatchEvent(
+      new CustomEvent('securesign:auth-changed', { detail: null })
+    );
     window.dispatchEvent(new Event('securesign:session-expired'));
   }
-}
-
-export function getCurrentUsername(): string | null {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('username');
-  }
-  return null;
-}
-
-export function getCurrentRole(): string | null {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('role');
-  }
-  return null;
-}
-
-export function getCurrentFullName(): string | null {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('fullName');
-  }
-  return null;
-}
-
-export function getCurrentTenantName(): string | null {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('tenantName');
-  }
-  return null;
 }
 
 export interface UserProfile {
@@ -151,19 +125,13 @@ export async function fetchUserProfile(): Promise<UserProfile | null> {
   try {
     const profile = await fetchAPI<UserProfile>('/auth/me');
     if (typeof window !== 'undefined') {
-      if (profile.username) localStorage.setItem('username', profile.username);
-      if (profile.role) localStorage.setItem('role', profile.role);
-      if (profile.full_name) {
-        localStorage.setItem('fullName', profile.full_name);
-      } else {
-        localStorage.removeItem('fullName');
-      }
-      if (profile.tenant_name) {
-        localStorage.setItem('tenantName', profile.tenant_name);
-      } else {
-        localStorage.removeItem('tenantName');
-      }
-      window.dispatchEvent(new Event('securesign:auth-changed'));
+      localStorage.removeItem('username');
+      localStorage.removeItem('role');
+      localStorage.removeItem('fullName');
+      localStorage.removeItem('tenantName');
+      window.dispatchEvent(
+        new CustomEvent('securesign:auth-changed', { detail: profile })
+      );
     }
     return profile;
   } catch {

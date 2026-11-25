@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
 import { showToast } from "@/lib/swal";
 import Image from "next/image";
 
@@ -60,9 +58,7 @@ export default function TrackingPage() {
   const isDraft = credential?.status === "DRAFT";
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50/80">
-      <Navbar />
-
+    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col bg-slate-50/80">
       <main className="mx-auto w-full max-w-3xl grow px-4 py-8 sm:px-6 lg:py-12">
         <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm">
           {/* Card Top Bar */}
@@ -276,7 +272,6 @@ export default function TrackingPage() {
         </div>
       </main>
 
-      <Footer />
     </div>
   );
 }

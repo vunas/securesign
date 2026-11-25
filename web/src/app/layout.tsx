@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Script from "next/script";
 import "./globals.css";
+import Footer from "@/components/Footer";
+import Navbar from "@/components/Navbar";
 
 export const metadata: Metadata = {
   title: "Hệ Thống Chữ Ký Số | SecureSign",
@@ -28,7 +30,9 @@ export default function RootLayout({
           src="https://cdn.jsdelivr.net/npm/sweetalert2@11"
           strategy="afterInteractive"
         />
+        <Navbar />
         {children}
+        <Footer />
       </body>
     </html>
   );

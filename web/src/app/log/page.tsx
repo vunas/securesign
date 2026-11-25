@@ -2,8 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
 import { fetchAPI } from "@/lib/api";
 import { getSwal, showToast } from "@/lib/swal";
 import { useClientSession } from "@/lib/hooks/use-client-session";
@@ -333,9 +331,7 @@ export default function LogClient() {
     const initialTab = params.get("tab") === "verify" ? "verify" : "audit";
     const initialQuery = new URLSearchParams();
     const initialLimit =
-      initialTab === "verify"
-        ? params.get("verifyLimit")
-        : params.get("limit");
+      initialTab === "verify" ? params.get("verifyLimit") : params.get("limit");
     initialQuery.set(
       "limit",
       initialLimit === "100" || initialLimit === "200" ? initialLimit : "50",
@@ -599,9 +595,7 @@ export default function LogClient() {
   const exportCsvHref = `/api/logs/audit/export?${buildAuditQueryParams(false)}`;
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50/80">
-      <Navbar />
-
+    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col bg-slate-50/80">
       <main className="w-full grow px-4 py-6 sm:px-6 lg:px-8">
         {loadError && (
           <div
@@ -1250,8 +1244,6 @@ export default function LogClient() {
           </>
         )}
       </main>
-
-      <Footer />
     </div>
   );
 }

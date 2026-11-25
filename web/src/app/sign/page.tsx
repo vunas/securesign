@@ -2,8 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
 import { fetchAPI, fetchAPIResponse } from "@/lib/api";
 import { showAlert, showAlertWithLinks } from "@/lib/swal";
 import { useClientSession } from "@/lib/hooks/use-client-session";
@@ -211,9 +209,7 @@ export default function SignClient() {
   );
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50/80">
-      <Navbar />
-
+    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col bg-slate-50/80">
       <main className="mx-auto w-full max-w-6xl grow px-4 py-6">
         {keysError && (
           <div
@@ -763,7 +759,6 @@ export default function SignClient() {
         </form>
       </main>
 
-      <Footer />
     </div>
   );
 }
