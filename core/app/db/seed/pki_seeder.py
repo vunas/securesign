@@ -11,9 +11,10 @@ async def seed_pki(db: AsyncSession, users: dict):
     print("🔑 Đang tạo Hệ thống PKI...")
 
     tenant_id = users["tenant"].id
+    tenant_admin_id = users["group"].id
 
     root_key = await key_service.create_key(
-        db, tenant_id, KeyCreate(key_name="Root CA Key", key_size=2048)
+        db, tenant_id, KeyCreate(key_name="Root CA Key", key_size=2048), user_id=tenant_admin_id
     )
     root_cert = await certificate_service.create_root_ca(
         db,
@@ -26,6 +27,7 @@ async def seed_pki(db: AsyncSession, users: dict):
             valid_days=3650,
             cert_type=CertType.ROOT,
         ),
+        user_id=tenant_admin_id,
     )
     db.add(
         CertificateChain(
@@ -37,7 +39,10 @@ async def seed_pki(db: AsyncSession, users: dict):
     print("  -> Đã tạo Root CA")
 
     inter_key = await key_service.create_key(
-        db, tenant_id, KeyCreate(key_name="Intermediate CA Key", key_size=2048)
+        db,
+        tenant_id,
+        KeyCreate(key_name="Intermediate CA Key", key_size=2048),
+        user_id=tenant_admin_id,
     )
     inter_cert = await certificate_service.create_signed_cert(
         db,
@@ -51,6 +56,7 @@ async def seed_pki(db: AsyncSession, users: dict):
             cert_type=CertType.INTERMEDIATE,
         ),
         issuer_cert=root_cert,
+        user_id=tenant_admin_id,
     )
     db.add(
         CertificateChain(
@@ -62,7 +68,10 @@ async def seed_pki(db: AsyncSession, users: dict):
     print("  -> Đã tạo Intermediate CA")
 
     tsa_key = await key_service.create_key(
-        db, tenant_id, KeyCreate(key_name="Internal TSA Key", key_size=2048)
+        db,
+        tenant_id,
+        KeyCreate(key_name="Internal TSA Key", key_size=2048),
+        user_id=tenant_admin_id,
     )
     tsa_cert = await certificate_service.create_signed_cert(
         db,
@@ -76,6 +85,7 @@ async def seed_pki(db: AsyncSession, users: dict):
             cert_type=CertType.END_ENTITY,
         ),
         issuer_cert=inter_cert,
+        user_id=tenant_admin_id,
     )
     tsa_cert.purpose = "timestamping"
     db.add(
@@ -89,20 +99,24 @@ async def seed_pki(db: AsyncSession, users: dict):
     print("  -> Đã tạo TSA Certificate")
 
     user_key = await key_service.create_key(
-        db, tenant_id, KeyCreate(key_name="Khóa Ký Hợp Đồng", key_size=2048)
+        db,
+        tenant_id,
+        KeyCreate(key_name="Khóa Ký Hợp Đồng", key_size=2048),
+        user_id=tenant_admin_id,
     )
     user_cert = await certificate_service.create_signed_cert(
         db,
         tenant_id,
         CertificateCreate(
-            cert_name="Chứng chỉ Giám Đốc Nguyễn",
+            cert_name=f"{users['tenant'].name} Signing Certificate",
             key_id=user_key.id,
             issuer="SecureSign Intermediate CA",
-            subject="Giám Đốc Nguyễn Văn A",
+            subject=users["tenant"].name,
             valid_days=365,
             cert_type=CertType.END_ENTITY,
         ),
         issuer_cert=inter_cert,
+        user_id=tenant_admin_id,
     )
     user_cert.purpose = "document_signing"
     db.add(

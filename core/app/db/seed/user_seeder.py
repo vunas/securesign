@@ -34,10 +34,24 @@ async def seed_users(db: AsyncSession):
     )
 
     users_data = [
-        {"username": "admin", "pass": "123456", "role": UserRole.PLATFORM_SUPER_ADMIN},
-        {"username": "giamdoc", "pass": "123456", "role": UserRole.TENANT_ADMIN},
-        {"username": "nhanvien", "pass": "123456", "role": UserRole.TENANT_OPERATOR},
-        {"username": "demo", "pass": "123456", "role": UserRole.TENANT_OPERATOR},
+        {
+            "username": "admin",
+            "pass": "123456",
+            "role": UserRole.PLATFORM_SUPER_ADMIN,
+            "full_name": "Platform Administrator",
+        },
+        {
+            "username": "group",
+            "pass": "123456",
+            "role": UserRole.TENANT_ADMIN,
+            "full_name": "Group Organization Admin",
+        },
+        {
+            "username": "demo",
+            "pass": "123456",
+            "role": UserRole.TENANT_OPERATOR,
+            "full_name": "Demo Operator",
+        },
     ]
 
     created_users = {}
@@ -48,6 +62,7 @@ async def seed_users(db: AsyncSession):
             password_hash=get_password_hash(user_data["pass"]),
             tenant_id=None if user_data["role"] == UserRole.PLATFORM_SUPER_ADMIN else tenant.id,
             role=user_data["role"],
+            full_name=user_data["full_name"],
             is_active=True,
         )
         db.add(user)

@@ -14,9 +14,9 @@ async def seed_credentials(db: AsyncSession, users: dict):
     tenant = users["tenant"]
     minimal_pdf = b"%PDF-1.4 fake"
     credentials_info = [
-        ("hop_dong_thue_nha_2026.pdf", users["giamdoc"], CredentialStatus.ISSUED),
-        ("don_xin_nghi_phep_T4.pdf", users["nhanvien"], CredentialStatus.DRAFT),
-        ("bao_cao_tai_chinh_Q1.pdf", users["giamdoc"], CredentialStatus.ISSUED),
+        ("hop_dong_thue_nha_2026.pdf", users["group"], CredentialStatus.ISSUED),
+        ("don_xin_nghi_phep_T4.pdf", users["demo"], CredentialStatus.DRAFT),
+        ("bao_cao_tai_chinh_Q1.pdf", users["group"], CredentialStatus.ISSUED),
     ]
     created_credentials = []
 

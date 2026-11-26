@@ -10,19 +10,21 @@ from app.services.key_service import key_service
 router = APIRouter(prefix="/api/keys", tags=["Keys"])
 
 
-@router.post("/", response_model=KeyResponse)
+@router.post("/", response_model=KeyResponse, include_in_schema=False)
+@router.post("", response_model=KeyResponse)
 async def generate_new_key(
     key_data: KeyCreate,
     db: DatabaseDep,
-    current_user: ActiveTenantUserDep,
+    current_user: TenantAdminDep,
 ):
-    """Tạo một cặp khóa ký và lưu trên Server."""
+    """Tạo một cặp khóa ký và lưu trên Server. Chỉ dành cho Quản trị viên tổ chức (Tenant Admin)."""
     return await key_service.create_key(
         db, current_user.tenant_id, key_data, user_id=current_user.id
     )
 
 
-@router.get("/", response_model=List[KeyResponse])
+@router.get("/", response_model=List[KeyResponse], include_in_schema=False)
+@router.get("", response_model=List[KeyResponse])
 async def get_my_keys(db: DatabaseDep, current_user: ActiveTenantUserDep):
     """Lấy danh sách khóa có chứng thư ký văn bằng còn hiệu lực."""
     if current_user.tenant_id is None:
@@ -40,6 +42,25 @@ async def revoke_key(
         raise HTTPException(status_code=403, detail="Tenant role required.")
     try:
         key_record = await key_service.revoke_key(
+            db, key_id, current_user.tenant_id, current_user.id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if key_record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa.")
+    return key_record
+
+
+@router.post("/{key_id}/rotate-encryption", response_model=KeyResponse)
+async def rotate_key_encryption(
+    key_id: int,
+    db: DatabaseDep,
+    current_user: TenantAdminDep,
+):
+    if current_user.tenant_id is None:
+        raise HTTPException(status_code=403, detail="Tenant role required.")
+    try:
+        key_record = await key_service.rotate_encryption(
             db, key_id, current_user.tenant_id, current_user.id
         )
     except ValueError as exc:

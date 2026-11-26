@@ -70,7 +70,7 @@ async def run_seed(force=False):
             await log_service.log_action(
                 db=db,
                 tenant_id=created_users["tenant"].id,
-                user_id=created_users["giamdoc"].id,
+                user_id=created_users["group"].id,
                 action="SEED_DATA",
                 target_type=TargetResourceType.SYSTEM,
                 target_id="seed",
@@ -79,7 +79,7 @@ async def run_seed(force=False):
             await db.commit()
 
             print("-" * 50)
-            print("✅ HOÀN TẤT SEED DATA")
+            print("HOÀN TẤT SEED DATA")
             print("-" * 50)
         except Exception as error:
             await db.rollback()

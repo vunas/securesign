@@ -86,10 +86,8 @@ async def review_tenant(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy tổ chức.")
-    tenant, api_key_secret = result
-    response = TenantProvisionedResponse.model_validate(tenant, from_attributes=True)
-    response.api_key_secret = api_key_secret
-    return response
+    tenant, _ = result
+    return TenantProvisionedResponse.model_validate(tenant, from_attributes=True)
 
 
 @router.patch("/api/admin/tenants/{tenant_id}/status", response_model=TenantResponse)

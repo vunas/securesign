@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import (
     Encoding,
     load_pem_private_key,
@@ -39,7 +40,15 @@ class CertificateService:
                 except Exception:
                     raise ValueError("Passphrase giải mã khóa không chính xác!")
             else:
-                priv_key_bytes = aes_service.decrypt_key(key_record.private_key_encrypted)
+                if getattr(key_record, "encrypted_dek", None) is not None:
+                    priv_key_bytes = aes_service.decrypt_key_envelope(
+                        key_record.private_key_encrypted,
+                        key_record.encrypted_dek,
+                        key_record.private_key_nonce,
+                        key_record.encryption_version,
+                    )
+                else:
+                    priv_key_bytes = aes_service.decrypt_key(key_record.private_key_encrypted)
                 return load_pem_private_key(priv_key_bytes, password=None)
 
     async def create_root_ca(
@@ -164,14 +173,15 @@ class CertificateService:
             )
         )
 
+        is_ec = isinstance(user_public_key, ec.EllipticCurvePublicKey)
         if not is_ca and not is_tsa:
             cert_builder = cert_builder.add_extension(
                 x509.KeyUsage(
                     digital_signature=True,
                     content_commitment=True,
-                    key_encipherment=True,
+                    key_encipherment=not is_ec,
                     data_encipherment=False,
-                    key_agreement=False,
+                    key_agreement=is_ec,
                     key_cert_sign=False,
                     crl_sign=False,
                     encipher_only=False,
@@ -231,10 +241,11 @@ class CertificateService:
         )
         return created_cert
 
-    async def get_root_ca(self, db: AsyncSession):
-        result = await db.execute(
-            select(Certificate).filter(Certificate.cert_type == CertType.ROOT)
-        )
+    async def get_root_ca(self, db: AsyncSession, tenant_id: int | None = None):
+        statement = select(Certificate).where(Certificate.cert_type == CertType.ROOT)
+        if tenant_id is not None:
+            statement = statement.where(Certificate.tenant_id == tenant_id)
+        result = await db.execute(statement)
         return result.scalars().first()
 
     async def get_intermediate_ca(self, db: AsyncSession):

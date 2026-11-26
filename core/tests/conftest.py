@@ -1,4 +1,3 @@
-# ruff: noqa: E402
 from __future__ import annotations
 
 import os
@@ -9,11 +8,6 @@ from unittest.mock import AsyncMock
 import pytest
 import pytest_asyncio
 from dotenv import load_dotenv
-
-load_dotenv()
-os.environ.setdefault("SECRET_KEY", "test-only-secret-key-not-for-production-use")
-os.environ.setdefault("ENCRYPTION_KEY", "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=")
-
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event
@@ -24,9 +18,18 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.core.dependencies import get_active_tenant_user, get_current_user, get_db
+from app.core.dependencies import (
+    get_active_tenant_user,
+    get_current_user,
+    get_db,
+    get_tenant_admin,
+)
 from app.db.base import Base
 from app.models.enums import CredentialStatus, UserRole
+
+load_dotenv()
+os.environ.setdefault("SECRET_KEY", "test-only-secret-key-not-for-production-use")
+os.environ.setdefault("ENCRYPTION_KEY", "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=")
 
 
 @pytest_asyncio.fixture()
@@ -71,6 +74,22 @@ async def db_session(pg_engine: AsyncEngine) -> AsyncGenerator[AsyncSession, Non
         await connection.close()
 
 
+@pytest_asyncio.fixture()
+async def sqlite_db_session() -> AsyncGenerator[AsyncSession, None]:
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    db = session_factory()
+    try:
+        yield db
+    finally:
+        await db.close()
+        await engine.dispose()
+
+
 @pytest.fixture()
 def override_get_db(db_session: AsyncSession):
     async def _override() -> AsyncGenerator[AsyncSession, None]:
@@ -81,10 +100,18 @@ def override_get_db(db_session: AsyncSession):
 
 @pytest.fixture()
 def fastapi_app_full(override_get_db) -> FastAPI:
-    from app.routers import auth_router, key_router, log_router, signature_router, verify_router
+    from app.routers import (
+        auth_router,
+        credential_router,
+        key_router,
+        log_router,
+        signature_router,
+        verify_router,
+    )
 
     app = FastAPI()
     app.include_router(auth_router.router)
+    app.include_router(credential_router.router)
     app.include_router(signature_router.router)
     app.include_router(verify_router.router)
     app.include_router(key_router.router)
@@ -102,6 +129,8 @@ async def client_full(fastapi_app_full: FastAPI):
 
 @pytest.fixture()
 def override_current_user_full(fastapi_app_full: FastAPI):
+    from fastapi import HTTPException, status
+
     from app.models.user import User
 
     user = User(
@@ -109,15 +138,24 @@ def override_current_user_full(fastapi_app_full: FastAPI):
         username="test_enterprise_user",
         password_hash="hash",
         tenant_id=1,
-        role=UserRole.TENANT_OPERATOR,
+        role=UserRole.TENANT_ADMIN,
         is_active=True,
     )
 
     def _override() -> User:
         return user
 
+    def _override_tenant_admin() -> User:
+        if user.role != UserRole.TENANT_ADMIN:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Chỉ quản trị viên tổ chức được phép thực hiện thao tác này.",
+            )
+        return user
+
     fastapi_app_full.dependency_overrides[get_current_user] = _override
     fastapi_app_full.dependency_overrides[get_active_tenant_user] = _override
+    fastapi_app_full.dependency_overrides[get_tenant_admin] = _override_tenant_admin
     return user
 
 

@@ -9,8 +9,9 @@ pytestmark = pytest.mark.asyncio
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("endpoint", ["/api/keys", "/api/keys/"])
 async def test_generate_key_endpoint_uses_dependency_overrides(
-    client_full, db_session, override_current_user_full
+    client_full, db_session, override_current_user_full, endpoint
 ):
     # Ensure the overridden current user exists in DB if any code queries it later
     result = await db_session.execute(
@@ -46,7 +47,7 @@ async def test_generate_key_endpoint_uses_dependency_overrides(
         "passphrase": None,
     }
 
-    res = await client_full.post("/api/keys/", json=payload)
+    res = await client_full.post(endpoint, json=payload)
 
     assert res.status_code == 200, res.text
     data = res.json()
@@ -59,3 +60,22 @@ async def test_generate_key_endpoint_uses_dependency_overrides(
     assert isinstance(data["key_fingerprint"], str)
     assert len(data["key_fingerprint"]) == 16
     assert data["key_fingerprint"].upper() == data["key_fingerprint"]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("endpoint", ["/api/keys", "/api/keys/"])
+async def test_generate_key_endpoint_forbidden_for_tenant_operator(
+    client_full, override_current_user_full, endpoint
+):
+    from app.models.enums import UserRole
+
+    override_current_user_full.role = UserRole.TENANT_OPERATOR
+    payload = {
+        "key_name": "Operator Key Attempt",
+        "storage_type": "server",
+        "key_size": 2048,
+        "algorithm": "RSA",
+        "passphrase": None,
+    }
+    res = await client_full.post(endpoint, json=payload)
+    assert res.status_code == 403

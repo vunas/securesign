@@ -36,7 +36,12 @@ class KeyService:
             encryption_algorithm=serialization.NoEncryption(),
         )
 
-        encrypted_priv_pem = aes_service.encrypt_key(unencrypted_pem)
+        (
+            encrypted_priv_pem,
+            encrypted_dek,
+            private_key_nonce,
+            encryption_version,
+        ) = aes_service.encrypt_key_envelope(unencrypted_pem)
 
         pub_key_pem = private_key.public_key().public_bytes(
             encoding=serialization.Encoding.PEM,
@@ -50,6 +55,9 @@ class KeyService:
             key_name=key_data.key_name,
             public_key=pub_key_pem,
             private_key_encrypted=encrypted_priv_pem,
+            encrypted_dek=encrypted_dek,
+            private_key_nonce=private_key_nonce,
+            encryption_version=encryption_version,
             key_size=key_data.key_size if key_data.algorithm.value == "RSA" else 256,
             algorithm=key_data.algorithm,
             storage_type=key_data.storage_type,
@@ -71,6 +79,40 @@ class KeyService:
         )
 
         return db_key
+
+    async def rotate_encryption(self, db: AsyncSession, key_id: int, tenant_id: int, user_id: int):
+        key_record = await key_repo.get_by_id(db, key_id, tenant_id)
+        if key_record is None:
+            return None
+        if key_record.is_revoked:
+            raise ValueError("Không thể xoay vòng khóa đã bị thu hồi.")
+
+        if key_record.encrypted_dek is not None:
+            private_key = aes_service.decrypt_key_envelope(
+                key_record.private_key_encrypted,
+                key_record.encrypted_dek,
+                key_record.private_key_nonce,
+                key_record.encryption_version,
+            )
+        else:
+            private_key = aes_service.decrypt_key(key_record.private_key_encrypted)
+        (
+            key_record.private_key_encrypted,
+            key_record.encrypted_dek,
+            key_record.private_key_nonce,
+            key_record.encryption_version,
+        ) = aes_service.encrypt_key_envelope(private_key)
+        await db.flush()
+        await log_service.log_action(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action="ROTATE_KEY_ENCRYPTION",
+            target_type=TargetResourceType.KEY,
+            target_id=str(key_id),
+            payload={"key_fingerprint": key_record.key_fingerprint},
+        )
+        return key_record
 
     async def revoke_key(self, db: AsyncSession, key_id: int, tenant_id: int, user_id: int):
         key_record = await key_repo.get_by_id(db, key_id, tenant_id)

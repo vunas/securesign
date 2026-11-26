@@ -19,10 +19,12 @@ async def test_key_service_create_key_fingerprint_sha256_first_16_upper_hex(monk
 
     captured = {}
 
-    def fake_encrypt_key(data: bytes) -> bytes:
-        return b"ENCRYPTED(" + data[:8] + b")"
+    def fake_encrypt_key_envelope(data: bytes):
+        return b"ENCRYPTED(" + data[:8] + b")", b"WRAPPED_DEK", b"0" * 12, 1
 
-    monkeypatch.setattr("app.services.key_service.aes_service.encrypt_key", fake_encrypt_key)
+    monkeypatch.setattr(
+        "app.services.key_service.aes_service.encrypt_key_envelope", fake_encrypt_key_envelope
+    )
     monkeypatch.setattr(
         "app.services.key_service.key_repo.create",
         AsyncMock(

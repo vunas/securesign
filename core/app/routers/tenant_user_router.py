@@ -11,14 +11,21 @@ from app.services.tenant_user_service import tenant_user_service
 router = APIRouter(prefix="/api/tenant/users", tags=["Tenant Users"])
 
 
-@router.get("/", response_model=list[TenantUserResponse])
+@router.get("/", response_model=list[TenantUserResponse], include_in_schema=False)
+@router.get("", response_model=list[TenantUserResponse])
 async def list_tenant_users(db: DatabaseDep, admin: TenantAdminDep):
     if admin.tenant_id is None:
         raise HTTPException(status_code=403, detail="Tenant role required.")
     return await tenant_user_service.list_users(db, admin.tenant_id)
 
 
-@router.post("/", response_model=TenantUserResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=TenantUserResponse,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
+@router.post("", response_model=TenantUserResponse, status_code=status.HTTP_201_CREATED)
 async def create_tenant_operator(payload: TenantUserCreate, db: DatabaseDep, admin: TenantAdminDep):
     if admin.tenant_id is None:
         raise HTTPException(status_code=403, detail="Tenant role required.")

@@ -143,7 +143,10 @@ CREATE TABLE keys (
     user_id               INTEGER REFERENCES users(id) ON DELETE SET NULL,           -- Cán bộ khởi tạo khóa
     key_name              VARCHAR(100),
     public_key            BYTEA NOT NULL,
-    private_key_encrypted BYTEA NOT NULL,             -- Khóa bí mật đã mã hóa bằng Master Key (AES-256-GCM)
+    private_key_encrypted BYTEA NOT NULL,             -- Ciphertext private key (AES-256-GCM)
+    encrypted_dek         BYTEA,                     -- DEK được mã hóa bằng KEK/Master Key
+    private_key_nonce     BYTEA,                     -- Nonce của AES-GCM dùng cho private key
+    encryption_version    INTEGER,                   -- Phiên bản envelope encryption
     key_size              INTEGER DEFAULT 2048,
     algorithm             signature_algo DEFAULT 'RSA',
     storage_type          key_storage_type DEFAULT 'server',
